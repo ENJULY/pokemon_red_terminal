@@ -1,0 +1,114 @@
+#pragma once
+#include "../engine/renderer.h"
+#include "../engine/input.h"
+#include "../engine/audio.h"
+#include "player.h"
+#include "battle.h"
+#include "overworld.h"
+#include <string>
+
+enum class Scene {
+    INTRO,          // 오박사 대사
+    NAME_INPUT,     // 이름 입력
+    STARTER_SELECT, // 스타터 선택
+    RIVAL_BATTLE,   // 라이벌 배틀 (강제)
+    RECEIVE_DEX,    // 포켓덱스 수령 대사
+    OVERWORLD,      // 오버월드 탐험
+    WILD_BATTLE,    // 야생 포켓몬 배틀
+    TRAINER_BATTLE, // 트레이너 배틀
+    BOSS_BATTLE,    // 브록 배틀
+    POKEMON_CENTER, // 포켓몬센터 이벤트
+    MART_EVENT,     // 마트 소포 이벤트
+    GAME_OVER,      // 전멸
+    ENDING,         // 브록 클리어 엔딩
+};
+
+class Game {
+public:
+    Game();
+    void run();
+
+    Renderer renderer;
+    bool running = true;
+
+private:
+    Scene    scene_   = Scene::INTRO;
+    int      frame_   = 0;
+    Player   player_  = {};
+    Battle*  battle_  = nullptr;
+    Overworld* ow_    = nullptr;
+
+    void changeScene(Scene next);
+    void update(Key key);
+    void render();
+    void renderKorean();
+
+    // ─── 인트로 ───
+    static const int INTRO_COUNT = 9;
+    static const wchar_t* INTRO_LINES[INTRO_COUNT];
+    static const char* OAK_SPRITE[12];
+    int  introStep_     = 0;
+
+    void updateIntro(Key key);
+    void renderIntro();
+    void renderIntroKorean();
+
+    // ─── 이름 입력 ───
+    char     nameBuf_[16] = {};
+    int      nameLen_     = 0;
+
+    void updateNameInput(Key key, char ch);
+    void renderNameInput();
+    void renderNameInputKorean();
+
+    // ─── 스타터 선택 ───
+    int  starterCursor_ = 0;
+
+    void updateStarterSelect(Key key);
+    void renderStarterSelect();
+    void renderStarterSelectKorean();
+
+    // ─── 라이벌 배틀 ───
+    bool rivalBattleInit_ = false;
+
+    // ─── 포켓덱스 수령 ───
+    int  dexStep_ = 0;
+    static const wchar_t* DEX_LINES[5];
+
+    void updateReceiveDex(Key key);
+    void renderReceiveDex();
+    void renderReceiveDexKorean();
+
+    // ─── 포켓몬센터 ───
+    int  centerStep_ = 0;
+
+    void updateCenter(Key key);
+    void renderCenter();
+    void renderCenterKorean();
+
+    // ─── 마트 이벤트 ───
+    int  martStep_ = 0;
+
+    void updateMart(Key key);
+    void renderMart();
+    void renderMartKorean();
+
+    // ─── 게임 오버 ───
+    void renderGameOver();
+    void updateGameOver(Key key);
+
+    // ─── 엔딩 ───
+    int endingStep_ = 0;
+
+    void updateEnding(Key key);
+    void renderEnding();
+    void renderEndingKorean();
+
+    // ─── 공통 대화창 ───
+    const wchar_t* dialogLines_[6] = {};
+    int  dialogCount_  = 0;
+    int  dialogStep_   = 0;
+    Scene dialogNext_  = Scene::OVERWORLD;
+
+    void startDialog(const wchar_t** lines, int count, Scene next);
+};
