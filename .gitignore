@@ -1,0 +1,5 @@
+build/*.exe
+build/*.obj
+build/err.txt
+build_ci.bat
+*.o

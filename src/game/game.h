@@ -44,7 +44,7 @@ private:
     void renderKorean();
 
     // ─── 인트로 ───
-    static const int INTRO_COUNT = 9;
+    static const int INTRO_COUNT = 8;
     static const wchar_t* INTRO_LINES[INTRO_COUNT];
     static const char* OAK_SPRITE[12];
     int  introStep_     = 0;
