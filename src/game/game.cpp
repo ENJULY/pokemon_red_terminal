@@ -10,15 +10,22 @@
 #endif
 
 // ─── 정적 데이터 ──────────────────────────────────────────────
+// 원작 대사 순서 (pokered 동일):
+// 0~4: 나레이션, 5: 이름 확인(동적), 6~8: 라이벌 소개, 9: 라이벌 이름 확인(동적), 10~11: 마무리
+// nullptr = 동적으로 swprintf 처리
 const wchar_t* Game::INTRO_LINES[Game::INTRO_COUNT] = {
-    L"안녕하세요! 포켓몬의 세계에 오신 것을 환영합니다!",
-    L"제 이름은 오박사!",
-    L"사람들은 저를 포켓몬 박사라고 부르죠.",
-    L"이 세계에는 포켓몬이라 불리는 신기한 생물이 살고 있습니다!",
-    L"어떤 사람에게 포켓몬은 애완동물입니다.",
-    L"어떤 사람은 싸움에 사용하기도 하죠.",
-    L"나는... 포켓몬을 연구하는 사람입니다.",
-    L"자, 먼저 당신의 이름을 알려주세요!"
+    L"이 세계에는 포켓몬이라 불리는 생물이 서식하고 있습니다!",   // 0
+    L"어떤 사람들에게 포켓몬은 애완동물이기도 합니다.",            // 1
+    L"어떤 사람들은 포켓몬을 싸움에 사용하기도 하죠.",             // 2
+    L"나는... 포켓몬을 연구하는 사람입니다.",                      // 3
+    L"그런데 당신은 누구입니까? 먼저 이름을 알려주세요.",          // 4  → NAME_INPUT
+    nullptr,                                                        // 5  → "그렇군요! [이름]이군요!" (동적)
+    L"그리고 이 아이는 나의 손자입니다.",                          // 6
+    L"태어날 때부터 당신의 라이벌이었지요.",                       // 7
+    L"...음, 이름이 뭐였더라?",                                    // 8  → RIVAL_NAME_INPUT
+    nullptr,                                                        // 9  → "맞아! [라이벌]이야!" (동적)
+    L"당신만의 포켓몬 전설이 지금 시작되려 하고 있습니다!",        // 10
+    L"꿈과 모험이 가득한 포켓몬 세계로, 출발!",                    // 11 → STARTER_SELECT
 };
 
 const char* Game::OAK_SPRITE[12] = {
@@ -44,6 +51,13 @@ const wchar_t* Game::DEX_LINES[5] = {
     nullptr
 };
 
+const wchar_t* Game::LAB_INTRO_LINES[Game::LAB_INTRO_COUNT] = {
+    L"Oak: 나에게는 연구에 사용하던 세 마리의 포켓몬이 있어.",
+    L"Oak: 저 테이블 위 몬스터볼에 들어있지. 하나를 골라라!",
+    L"블루: 저도 하나 가져가겠습니다!",
+    L"Oak: 자, 어서 골라봐!",
+};
+
 // ─── 초기화 ──────────────────────────────────────────────────
 Game::Game() {
     srand((unsigned)time(nullptr));
@@ -51,6 +65,7 @@ Game::Game() {
     // 플레이어 초기 설정
     memset(&player_, 0, sizeof(player_));
     wcscpy(player_.name, L"RED");
+    wcscpy(player_.rivalName, L"블루");
     player_.mapId = MAP_PALLET;
     player_.x = 11; player_.y = 7;
     player_.dir = 0;
@@ -68,14 +83,14 @@ void Game::run() {
     while (running) {
         DWORD start = GetTickCount();
 
-        Key  key = Input::poll();
-        char ch  = Input::pollChar();
-
-        // Name input: pollChar 우선 처리
-        if (scene_ == Scene::NAME_INPUT) {
-            update(key);
-            updateNameInput(key, ch);
+        // 이름 입력 씬: poll()이 키다운을 소모하므로 pollChar() 단독 사용
+        if (scene_ == Scene::NAME_INPUT || scene_ == Scene::RIVAL_NAME_INPUT) {
+            char ch = Input::pollChar();
+            if (ch == 27) { running = false; continue; } // ESC
+            if (scene_ == Scene::NAME_INPUT)       updateNameInput(Key::NONE, ch);
+            else                                   updateRivalNameInput(Key::NONE, ch);
         } else {
+            Key key = Input::poll();
             update(key);
         }
 
@@ -101,8 +116,10 @@ void Game::update(Key key) {
     if (key == Key::ESCAPE) { running = false; return; }
 
     switch (scene_) {
-    case Scene::INTRO:          updateIntro(key);          break;
-    case Scene::NAME_INPUT:     /* handled separately */   break;
+    case Scene::INTRO:              updateIntro(key);          break;
+    case Scene::NAME_INPUT:         /* handled separately */   break;
+    case Scene::RIVAL_NAME_INPUT:   /* handled separately */   break;
+    case Scene::LAB_INTRO:          updateLabIntro(key);       break;
     case Scene::STARTER_SELECT: updateStarterSelect(key);  break;
     case Scene::RECEIVE_DEX:    updateReceiveDex(key);     break;
     case Scene::OVERWORLD: {
@@ -141,6 +158,13 @@ void Game::update(Key key) {
                 changeScene(Scene::MART_EVENT);
                 martStep_ = 0;
             }
+            break;
+        case OwEvent::OAK_INTERCEPT:
+            labIntroStep_ = 0;
+            // 플레이어를 연구소 위치로 이동
+            player_.mapId = MAP_OAK_LAB;
+            player_.x = 5; player_.y = 8;
+            changeScene(Scene::LAB_INTRO);
             break;
         default: break;
         }
@@ -215,9 +239,11 @@ void Game::update(Key key) {
 
 void Game::render() {
     switch (scene_) {
-    case Scene::INTRO:          renderIntro();          break;
-    case Scene::NAME_INPUT:     renderNameInput();      break;
-    case Scene::STARTER_SELECT: renderStarterSelect();  break;
+    case Scene::INTRO:              renderIntro();          break;
+    case Scene::NAME_INPUT:         renderNameInput();      break;
+    case Scene::RIVAL_NAME_INPUT:   renderRivalNameInput(); break;
+    case Scene::LAB_INTRO:          renderLabIntro();       break;
+    case Scene::STARTER_SELECT:     renderStarterSelect();  break;
     case Scene::RECEIVE_DEX:    renderReceiveDex();     break;
     case Scene::OVERWORLD:
         if (ow_) ow_->render();
@@ -237,9 +263,11 @@ void Game::render() {
 
 void Game::renderKorean() {
     switch (scene_) {
-    case Scene::INTRO:          renderIntroKorean();          break;
-    case Scene::NAME_INPUT:     renderNameInputKorean();      break;
-    case Scene::STARTER_SELECT: renderStarterSelectKorean();  break;
+    case Scene::INTRO:              renderIntroKorean();          break;
+    case Scene::NAME_INPUT:         renderNameInputKorean();      break;
+    case Scene::RIVAL_NAME_INPUT:   renderRivalNameInputKorean(); break;
+    case Scene::LAB_INTRO:          renderLabIntroKorean();       break;
+    case Scene::STARTER_SELECT:     renderStarterSelectKorean();  break;
     case Scene::RECEIVE_DEX:    renderReceiveDexKorean();     break;
     case Scene::OVERWORLD:
         if (ow_) ow_->renderKorean();
@@ -258,31 +286,91 @@ void Game::renderKorean() {
 
 // ─── 인트로 씬 ───────────────────────────────────────────────
 void Game::updateIntro(Key key) {
-    if (key == Key::A) {
-        introStep_++;
-        if (introStep_ >= INTRO_COUNT) {
-            changeScene(Scene::NAME_INPUT);
-            nameLen_ = 0;
-            memset(nameBuf_, 0, sizeof(nameBuf_));
-        }
+    if (key != Key::A) return;
+
+    // step 4: "이름을 알려주세요" → NAME_INPUT
+    if (introStep_ == 4) {
+        changeScene(Scene::NAME_INPUT);
+        nameLen_ = 0;
+        memset(nameBuf_, 0, sizeof(nameBuf_));
+        return;
     }
+    // step 8: "이름이 뭐였더라?" → RIVAL_NAME_INPUT
+    if (introStep_ == 8) {
+        changeScene(Scene::RIVAL_NAME_INPUT);
+        rivalNameLen_ = 0;
+        memset(rivalNameBuf_, 0, sizeof(rivalNameBuf_));
+        return;
+    }
+    // step 11 (마지막): → OVERWORLD (주인공 집 2층 시작 - 원작과 동일)
+    if (introStep_ == 11) {
+        player_.x = 4; player_.y = 4;  // 집 내부 중앙 (8×8 맵)
+        player_.mapId = MAP_PLAYER_HOUSE;
+        if (!ow_) ow_ = new Overworld(renderer, player_);
+        ow_->init();
+        changeScene(Scene::OVERWORLD);
+        return;
+    }
+
+    introStep_++;
 }
 
 void Game::renderIntro() {
     int W = renderer.width, H = renderer.height;
-    renderer.fillRect(0,0,W,H,' ', std::string(Color::BG_BLACK)+Color::WHITE);
+    renderer.fillRect(0,0,W,H,' ', std::string(Color::BG_BLACK)+Color::BLACK);
 
-    int titleX = W/2 - 8;
-    renderer.print(titleX, 2, " POKEMON RED ",
-        std::string(Color::BG_BLACK)+Color::BRIGHT_RED);
-    renderer.print(titleX, 3, "=============",
-        std::string(Color::BG_BLACK)+Color::RED);
+    int cx = W/2, cy = H/2 - 3;
 
-    // 오박사 스프라이트
-    int sprX = W/2 - 8, sprY = 5;
-    for (int i = 0; i < 12; i++)
-        renderer.print(sprX, sprY+i, OAK_SPRITE[i],
-            std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+    if (introStep_ <= 2) {
+        // 단계 0~2: 포켓몬 세계 풍경 (타이틀)
+        renderer.print(cx-10, cy-2, "~~~~~~~~~~~~~~~~~~",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_BLUE);
+        renderer.print(cx-10, cy-1, " TTTTTTT  TTTTTTT ",
+            std::string(Color::BG_BLACK)+Color::GREEN);
+        renderer.print(cx-10, cy,   "  TTTTT    TTTTT  ",
+            std::string(Color::BG_BLACK)+Color::GREEN);
+        renderer.print(cx-8,  cy+1, "..  ;;  ..  ;;  ..",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_GREEN);
+        renderer.print(cx-8,  cy+2, "..  ;;  ..  ;;  ..",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_GREEN);
+        renderer.print(cx-7,  cy-4, "* POKEMON  RED *",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_RED);
+    } else if (introStep_ <= 4) {
+        // 단계 3~4: 오박사 등장
+        int sprX = cx - 8, sprY = cy - 6;
+        for (int i = 0; i < 12; i++)
+            renderer.print(sprX, sprY+i, OAK_SPRITE[i],
+                std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+        renderer.print(cx-5, cy+7, "Prof. OAK",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW);
+    } else if (introStep_ <= 8) {
+        // 단계 5~8: 오박사 + 라이벌 소개
+        int sprX = cx - 14, sprY = cy - 5;
+        for (int i = 0; i < 12; i++)
+            renderer.print(sprX, sprY+i, OAK_SPRITE[i],
+                std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+        // 라이벌 실루엣
+        renderer.print(cx+2, cy-2, "  .--.",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
+        renderer.print(cx+2, cy-1, " /O  O\\",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
+        renderer.print(cx+2, cy,   " | -- |",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
+        renderer.print(cx+2, cy+1, " \\    /",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
+        renderer.print(cx+2, cy+2, "  `--'",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
+        renderer.print(cx+3, cy+3, "RIVAL",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
+    } else {
+        // 단계 9~11: 마무리
+        int sprX = cx - 8, sprY = cy - 5;
+        for (int i = 0; i < 12; i++)
+            renderer.print(sprX, sprY+i, OAK_SPRITE[i],
+                std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+        renderer.print(cx-6, cy+8, "* * * * * *",
+            std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW);
+    }
 
     // 대화창
     int bH=6, bY=H-bH-1, bW=W-4, bX=2;
@@ -290,18 +378,34 @@ void Game::renderIntro() {
     renderer.fillRect(bX+1,bY+1,bW-2,bH-2,' ',std::string(Color::BG_BLACK)+Color::WHITE);
     renderer.print(bX+2,bY+1,"[OAK]",
         std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW);
-    // 커서 깜박임
     if ((frame_/8)%2==0)
         renderer.print(bX+bW-4,bY+bH-2," v ",
             std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
-    renderer.print(bX+2,bY+bH-2,"[ Z/Enter: next ]",
+    renderer.print(bX+2,bY+bH-2,"[ Z / Enter: 다음 ]",
         std::string(Color::BG_BLACK)+Color::BRIGHT_BLACK);
 }
 
 void Game::renderIntroKorean() {
     int H = renderer.height;
     int bH=6, bY=H-bH-1, bX=2;
-    if (introStep_ < INTRO_COUNT)
+    if (introStep_ >= INTRO_COUNT) return;
+
+    // step 5: "그렇군요! [이름]이군요!" — 동적 생성
+    if (introStep_ == 5) {
+        wchar_t buf[64];
+        swprintf(buf, 64, L"그렇군요! 이름은 %ls이군요!", player_.name);
+        renderer.printW(bX+2, bY+3, buf, std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+        return;
+    }
+    // step 9: "맞아! [라이벌]이야!" — 동적 생성
+    if (introStep_ == 9) {
+        wchar_t buf[64];
+        swprintf(buf, 64, L"맞아! 이름은 %ls이야!", player_.rivalName);
+        renderer.printW(bX+2, bY+3, buf, std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+        return;
+    }
+
+    if (INTRO_LINES[introStep_])
         renderer.printW(bX+2, bY+3, INTRO_LINES[introStep_],
             std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
 }
@@ -310,16 +414,15 @@ void Game::renderIntroKorean() {
 void Game::updateNameInput(Key, char ch) {
     if (ch == 13) { // Enter → 확정
         if (nameLen_ == 0) {
-            // 기본 이름
             wcscpy(player_.name, L"RED");
         } else {
-            // ASCII → wchar_t
             for (int i = 0; i < nameLen_ && i < 8; i++)
                 player_.name[i] = (wchar_t)(unsigned char)nameBuf_[i];
             player_.name[nameLen_] = 0;
         }
-        changeScene(Scene::STARTER_SELECT);
-        starterCursor_ = 0;
+        // 인트로 step 5로 → "그렇군요! [이름]이군요!"
+        introStep_ = 5;
+        changeScene(Scene::INTRO);
     } else if (ch == 8) { // Backspace
         if (nameLen_ > 0) nameBuf_[--nameLen_] = 0;
     } else if (ch >= 32 && ch <= 126 && nameLen_ < 8) {
@@ -351,6 +454,50 @@ void Game::renderNameInputKorean() {
         std::string(Color::BG_BLACK)+Color::BRIGHT_BLACK);
 }
 
+// ─── 라이벌 이름 입력 ────────────────────────────────────────
+void Game::updateRivalNameInput(Key, char ch) {
+    if (ch == 13) { // Enter
+        if (rivalNameLen_ == 0) {
+            wcscpy(player_.rivalName, L"블루");
+        } else {
+            for (int i = 0; i < rivalNameLen_ && i < 8; i++)
+                player_.rivalName[i] = (wchar_t)(unsigned char)rivalNameBuf_[i];
+            player_.rivalName[rivalNameLen_] = 0;
+        }
+        // 인트로 step 9로 → "맞아! [라이벌]이야!"
+        introStep_ = 9;
+        changeScene(Scene::INTRO);
+    } else if (ch == 8) {
+        if (rivalNameLen_ > 0) rivalNameBuf_[--rivalNameLen_] = 0;
+    } else if (ch >= 32 && ch <= 126 && rivalNameLen_ < 8) {
+        rivalNameBuf_[rivalNameLen_++] = ch;
+        rivalNameBuf_[rivalNameLen_]   = 0;
+    }
+}
+
+void Game::renderRivalNameInput() {
+    int W = renderer.width, H = renderer.height;
+    renderer.fillRect(0,0,W,H,' ', std::string(Color::BG_BLACK)+Color::WHITE);
+    int bH=8, bY=H/2-4, bW=40, bX=(W-40)/2;
+    renderer.drawBox(bX,bY,bW,bH, std::string(Color::BG_BLACK)+Color::WHITE);
+    renderer.fillRect(bX+1,bY+1,bW-2,bH-2,' ',std::string(Color::BG_BLACK)+Color::WHITE);
+}
+
+void Game::renderRivalNameInputKorean() {
+    int W = renderer.width, H = renderer.height;
+    int bY=H/2-4, bX=(W-40)/2;
+    renderer.printW(bX+2, bY+2, L"라이벌의 이름을 입력하세요 (최대 8자):",
+        std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+    wchar_t disp[64] = L"> ";
+    for (int i = 0; i < rivalNameLen_; i++)
+        disp[2+i] = (wchar_t)(unsigned char)rivalNameBuf_[i];
+    disp[2+rivalNameLen_] = 0;
+    if ((frame_/8)%2==0) { disp[2+rivalNameLen_]='_'; disp[3+rivalNameLen_]=0; }
+    renderer.printW(bX+2, bY+4, disp, std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
+    renderer.printW(bX+2, bY+6, L"[ Enter: 확인 / 공백시 블루 ]",
+        std::string(Color::BG_BLACK)+Color::BRIGHT_BLACK);
+}
+
 // ─── 스타터 선택 ─────────────────────────────────────────────
 static const int STARTER_IDS[3] = {1, 4, 7};
 static const char* STARTER_ASCII[3][8] = {
@@ -371,14 +518,15 @@ void Game::updateStarterSelect(Key key) {
         // 스타터 지급
         player_.party[0] = makePokemon(STARTER_IDS[starterCursor_], 5);
         player_.partySize = 1;
-        // 라이벌 배틀 시작
-        if (!battle_) battle_ = new Battle(renderer, player_);
-        int rivalId = 25; // 피카츄
-        int rivalIds[] = {rivalId, 0, 0};
+        // 블루는 상성 포켓몬 선택 (원작 동일)
+        // Bulbasaur(0)→Charmander, Charmander(1)→Squirtle, Squirtle(2)→Bulbasaur
+        int rivalStarterIdx = (starterCursor_ + 1) % 3;
+        int rivalIds[]  = {STARTER_IDS[rivalStarterIdx], 0, 0};
         int rivalLvls[] = {5, 0, 0};
-        battle_->startTrainer(L"라이벌", L"잠깐, 배틀하자고!", rivalIds, rivalLvls, 1);
-        changeScene(Scene::RIVAL_BATTLE);
-        scene_ = Scene::TRAINER_BATTLE; // rival uses same battle system
+        if (!battle_) battle_ = new Battle(renderer, player_);
+        battle_->startTrainer(player_.rivalName, L"잠깐, 배틀하자고!",
+                              rivalIds, rivalLvls, 1);
+        changeScene(Scene::TRAINER_BATTLE);
     }
 }
 
@@ -408,9 +556,13 @@ void Game::renderStarterSelectKorean() {
     int W = renderer.width, H = renderer.height;
     int tableY = H/2 - 6;
     int spacing = W/4;
-    renderer.printW(W/2-8, tableY-3, L"포켓몬을 선택하세요!",
+    renderer.printW(W/2-10, tableY-4, L"[ 오박사 연구소 ]",
+        std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW);
+    renderer.printW(W/2-12, tableY-3, L"블루가 지켜보고 있다...",
+        std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
+    renderer.printW(W/2-8, tableY-2, L"포켓몬을 선택하세요!",
         std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
-    renderer.printW(W/2-12, tableY-2, L"← → 방향키로 선택, Z로 결정",
+    renderer.printW(W/2-12, tableY-1, L"← → 방향키로 선택, Z로 결정",
         std::string(Color::BG_BLACK)+Color::BRIGHT_BLACK);
     for (int i = 0; i < 3; i++) {
         int cx = spacing * (i+1) - 4;
@@ -458,6 +610,44 @@ void Game::renderReceiveDexKorean() {
     if (dexStep_ < 4 && DEX_LINES[dexStep_])
         renderer.printW(bX+2, bY+3, DEX_LINES[dexStep_],
             std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+}
+
+// ─── 연구소 인트로 ───────────────────────────────────────────
+void Game::updateLabIntro(Key key) {
+    if (key != Key::A) return;
+    labIntroStep_++;
+    if (labIntroStep_ >= LAB_INTRO_COUNT) {
+        changeScene(Scene::STARTER_SELECT);
+        starterCursor_ = 0;
+    }
+}
+
+void Game::renderLabIntro() {
+    int W = renderer.width, H = renderer.height;
+    renderer.fillRect(0,0,W,H,' ', std::string(Color::BG_BLACK)+Color::WHITE);
+    // 연구소 배경 - 테이블
+    int cx = W/2;
+    int ty = H/2 - 4;
+    renderer.print(cx-8, ty,   "+--------+", std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+    renderer.print(cx-8, ty+1, "|  (o)(o)(o)|", std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW);
+    renderer.print(cx-8, ty+2, "+--------+", std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+    renderer.print(cx-4, ty+3, "< BLUE >", std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
+    // 대화창
+    int bH=6, bY=H-bH-1, bW=W-4, bX=2;
+    renderer.drawBox(bX,bY,bW,bH, std::string(Color::BG_BLACK)+Color::WHITE);
+    renderer.fillRect(bX+1,bY+1,bW-2,bH-2,' ',std::string(Color::BG_BLACK)+Color::WHITE);
+    if ((frame_/8)%2==0)
+        renderer.print(bX+bW-4,bY+bH-2," v ", std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+}
+
+void Game::renderLabIntroKorean() {
+    int H = renderer.height;
+    int bH=6, bY=H-bH-1, bX=2;
+    if (labIntroStep_ < LAB_INTRO_COUNT)
+        renderer.printW(bX+2, bY+3, LAB_INTRO_LINES[labIntroStep_],
+            std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+    renderer.printW(bX+2, bY+bH-2, L"[ Z: 계속 ]",
+        std::string(Color::BG_BLACK)+Color::BRIGHT_BLACK);
 }
 
 // ─── 포켓몬센터 ──────────────────────────────────────────────

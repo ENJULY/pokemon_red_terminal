@@ -20,7 +20,7 @@ struct MoveData {
     int             effect;
 };
 
-static const MoveData MOVES[] = {
+inline constexpr MoveData MOVES[] = {
     { 0, L"",           Type::NORMAL,    0,   0,  0, 0}, // null slot
     // Gen1 실제 수치 기준
     { 1, L"몸통박치기",  Type::NORMAL,   35,  95, 35, 0}, // Tackle: 35pwr 95acc
@@ -41,7 +41,7 @@ static const MoveData MOVES[] = {
     {16, L"독침붕",      Type::POISON,   15, 100, 35, 0}, // Poison Sting
     {17, L"돌풍",        Type::NORMAL,   40, 100, 35, 0}, // Gust (Gen1: Normal타입)
 };
-static const int NUM_MOVES_DATA = 18;
+inline constexpr int NUM_MOVES_DATA = 18;
 
 inline const MoveData& getMoveData(int id) {
     if (id > 0 && id < NUM_MOVES_DATA) return MOVES[id];
@@ -62,7 +62,7 @@ struct PokemonSpecies {
     LearnMove      learnset[8];    // 레벨업 기술 ({0,0} 종료)
 };
 
-static const PokemonSpecies SPECIES[] = {
+inline constexpr PokemonSpecies SPECIES[] = {
     // ── 스타터 ────────────────────────────────────────────────
     // 이상해씨: Lv7 씨뿌리기→ 여기선 넝쿨채찍으로 단순화, Lv13 넝쿨채찍
     { 1, L"이상해씨", Type::GRASS,    Type::POISON,  45,49,49,45,65, 64,
@@ -101,7 +101,7 @@ static const PokemonSpecies SPECIES[] = {
     {25, L"피카츄",   Type::ELECTRIC, Type::NONE,    35,55,30,90,50, 82,
       {13,2,0,0}, {{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}} },
 };
-static const int NUM_SPECIES_DATA = 11;
+inline constexpr int NUM_SPECIES_DATA = 11;
 
 inline const PokemonSpecies* getSpecies(int id) {
     for (int i = 0; i < NUM_SPECIES_DATA; i++)

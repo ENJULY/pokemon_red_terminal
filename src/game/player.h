@@ -23,6 +23,7 @@ struct Pokemon {
 // ─── 플레이어 ────────────────────────────────────────────────
 struct Player {
     wchar_t name[16];
+    wchar_t rivalName[16];
     Pokemon party[6];
     int     partySize;
 

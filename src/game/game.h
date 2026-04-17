@@ -8,19 +8,21 @@
 #include <string>
 
 enum class Scene {
-    INTRO,          // 오박사 대사
-    NAME_INPUT,     // 이름 입력
-    STARTER_SELECT, // 스타터 선택
-    RIVAL_BATTLE,   // 라이벌 배틀 (강제)
-    RECEIVE_DEX,    // 포켓덱스 수령 대사
-    OVERWORLD,      // 오버월드 탐험
-    WILD_BATTLE,    // 야생 포켓몬 배틀
-    TRAINER_BATTLE, // 트레이너 배틀
-    BOSS_BATTLE,    // 브록 배틀
-    POKEMON_CENTER, // 포켓몬센터 이벤트
-    MART_EVENT,     // 마트 소포 이벤트
-    GAME_OVER,      // 전멸
-    ENDING,         // 브록 클리어 엔딩
+    INTRO,              // 오박사 나레이션 (전/후반 공용)
+    NAME_INPUT,         // 플레이어 이름 입력
+    RIVAL_NAME_INPUT,   // 라이벌 이름 입력
+    LAB_INTRO,          // 연구소 인트로 (오박사 설명 + 블루 등장)
+    STARTER_SELECT,     // 스타터 선택
+    RIVAL_BATTLE,       // 라이벌 배틀 (강제)
+    RECEIVE_DEX,        // 포켓덱스 수령 대사
+    OVERWORLD,          // 오버월드 탐험
+    WILD_BATTLE,        // 야생 포켓몬 배틀
+    TRAINER_BATTLE,     // 트레이너 배틀
+    BOSS_BATTLE,        // 브록 배틀
+    POKEMON_CENTER,     // 포켓몬센터 이벤트
+    MART_EVENT,         // 마트 소포 이벤트
+    GAME_OVER,          // 전멸
+    ENDING,             // 브록 클리어 엔딩
 };
 
 class Game {
@@ -44,7 +46,8 @@ private:
     void renderKorean();
 
     // ─── 인트로 ───
-    static const int INTRO_COUNT = 8;
+    // 0~4: 나레이션, 5: 레드 이름 확인, 6~8: 라이벌 소개, 9~10: 마무리 → OVERWORLD
+    static const int INTRO_COUNT = 11;
     static const wchar_t* INTRO_LINES[INTRO_COUNT];
     static const char* OAK_SPRITE[12];
     int  introStep_     = 0;
@@ -61,6 +64,14 @@ private:
     void renderNameInput();
     void renderNameInputKorean();
 
+    // ─── 라이벌 이름 입력 ───
+    char     rivalNameBuf_[16] = {};
+    int      rivalNameLen_     = 0;
+
+    void updateRivalNameInput(Key key, char ch);
+    void renderRivalNameInput();
+    void renderRivalNameInputKorean();
+
     // ─── 스타터 선택 ───
     int  starterCursor_ = 0;
 
@@ -70,6 +81,14 @@ private:
 
     // ─── 라이벌 배틀 ───
     bool rivalBattleInit_ = false;
+
+    // ─── 연구소 인트로 ───
+    static const int LAB_INTRO_COUNT = 4;
+    static const wchar_t* LAB_INTRO_LINES[LAB_INTRO_COUNT];
+    int labIntroStep_ = 0;
+    void updateLabIntro(Key key);
+    void renderLabIntro();
+    void renderLabIntroKorean();
 
     // ─── 포켓덱스 수령 ───
     int  dexStep_ = 0;

@@ -4,7 +4,7 @@
 // type_eff[공격타입][방어타입]
 // 0=무효 5=비효과적(0.5x) 10=보통(1x) 20=효과적(2x)
 // 타입 순서: NOR FIR WAT GRS ELC BUG ROK GRO POI FLY PSY GHO
-static const int TYPE_EFF[12][12] = {
+inline constexpr int TYPE_EFF[12][12] = {
     //       NOR FIR WAT GRS ELC BUG ROK GRO POI FLY PSY GHO
     /*NOR*/{ 10, 10, 10, 10, 10, 10,  5, 10, 10, 10, 10,  0},
     /*FIR*/{ 10,  5,  5, 20, 10, 20,  5, 10, 10, 10, 10, 10},

@@ -3,6 +3,7 @@
 #include "../engine/renderer.h"
 #include "../engine/input.h"
 #include "../data/map_data.h"
+#include "../data/tiles.h"
 
 enum class OwEvent {
     NONE,
@@ -13,6 +14,7 @@ enum class OwEvent {
     ENTER_POKEMON_CENTER, // 포켓몬센터
     ENTER_MART,       // 마트 (소포 이벤트)
     GAME_WON,         // 브록 클리어 후
+    OAK_INTERCEPT,    // 팔레트시티 북쪽 진입 → 오박사 등장
 };
 
 struct NpcDialogState {

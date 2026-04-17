@@ -110,6 +110,13 @@ void Renderer::printW(int x, int y, const std::wstring& text, const std::string&
     fflush(stdout);
 }
 
+void Renderer::printRaw(int x, int y, const char* utf8_ansi) {
+    // ANSI 코드 + UTF-8 포함 문자열을 직접 printf로 출력 (스프라이트용)
+    moveCursor(x, y);
+    printf("%s", utf8_ansi);
+    fflush(stdout);
+}
+
 // ─────────────────────────────────────────────
 //  flush: 행 단위로 출력 (cell-by-cell 보다 빠름)
 // ─────────────────────────────────────────────

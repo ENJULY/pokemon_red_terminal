@@ -2,9 +2,30 @@
 #include <cstdlib>
 #include <cstring>
 #include <wchar.h>
+#include <cstdio>
 #ifndef swprintf
 #define swprintf _snwprintf
 #endif
+
+// ─── 주인공 ASCII 스프라이트 (방향별 2프레임) ──────────────────
+// [방향 0~3][프레임 0~1][행 0~2], 3글자 너비
+// 방향: 0=아래 1=위 2=왼 3=오른
+#define ANSI_YEL "\x1b[1;33m"
+#define ANSI_RST "\x1b[0m"
+static const char* PLAYER_SPR[4][2][3] = {
+    // 0: 아래 (플레이어를 향함)
+    {{ANSI_YEL " o " ANSI_RST, ANSI_YEL"/|\\"ANSI_RST, ANSI_YEL"/ \\"ANSI_RST},
+     {ANSI_YEL " o " ANSI_RST, ANSI_YEL"\\|/"ANSI_RST, ANSI_YEL" | "ANSI_RST}},
+    // 1: 위 (등 보임)
+    {{ANSI_YEL " o " ANSI_RST, ANSI_YEL"\\|/"ANSI_RST, ANSI_YEL"/ \\"ANSI_RST},
+     {ANSI_YEL " o " ANSI_RST, ANSI_YEL"/|\\"ANSI_RST, ANSI_YEL" | "ANSI_RST}},
+    // 2: 왼
+    {{ANSI_YEL " o " ANSI_RST, ANSI_YEL"<| "ANSI_RST, ANSI_YEL"/ \\"ANSI_RST},
+     {ANSI_YEL " o " ANSI_RST, ANSI_YEL"<- "ANSI_RST, ANSI_YEL" | "ANSI_RST}},
+    // 3: 오른
+    {{ANSI_YEL " o " ANSI_RST, ANSI_YEL" |>"ANSI_RST, ANSI_YEL"/ \\"ANSI_RST},
+     {ANSI_YEL " o " ANSI_RST, ANSI_YEL" ->"ANSI_RST, ANSI_YEL" | "ANSI_RST}},
+};
 
 Overworld::Overworld(Renderer& r, Player& pl)
     : ren_(r), pl_(pl), state_{}
@@ -47,7 +68,7 @@ void Overworld::onReturnFromCenter() {
     pl_.x = state_.px; pl_.y = state_.py;
 }
 
-// ─── 타일 렌더 ───────────────────────────────────────────────
+// ─── 타일 렌더 (1char 기반 버퍼 fallback - 더 이상 직접 호출 안 함) ─────
 void Overworld::drawTile(int sx, int sy, char tile) {
     char ch;
     std::string col = Color::BG_BLACK;
@@ -83,19 +104,25 @@ void Overworld::tryMove(int dx, int dy) {
     int nx = state_.px + dx;
     int ny = state_.py + dy;
 
+    // 스타터 없는 상태에서 팔레트시티 북쪽 진입 → 오박사 저지
+    if (ny < 0 && state_.mapId == MAP_PALLET && pl_.partySize == 0) {
+        state_.pendingEvent = OwEvent::OAK_INTERCEPT;
+        return;
+    }
+
     // 맵 경계 이탈 → 인접 맵 이동
     if (ny < 0 && m->northMap >= 0) {
         MapDef* nm = getMap(m->northMap);
         if (nm) {
             state_.mapId = m->northMap;
             state_.px = m->northEntryX;
-            state_.py = MAP_H - 1;
+            state_.py = nm->mapH - 1;
             pl_.mapId = state_.mapId;
             pl_.x = state_.px; pl_.y = state_.py;
         }
         return;
     }
-    if (ny >= MAP_H && m->southMap >= 0) {
+    if (ny >= m->mapH && m->southMap >= 0) {
         MapDef* sm = getMap(m->southMap);
         if (sm) {
             state_.mapId = m->southMap;
@@ -144,12 +171,20 @@ void Overworld::checkWarps(int x, int y) {
     for (int i = 0; i < m->numWarps; i++) {
         const WarpDef& w = m->warps[i];
         if (w.srcX == x && w.srcY == y) {
+            MapDef* dest = getMap(w.destMap);
+            if (!dest) return;
             state_.mapId = w.destMap;
-            state_.px    = w.destX;
-            state_.py    = w.destY;
-            pl_.mapId    = state_.mapId;
-            pl_.x        = state_.px;
-            pl_.y        = state_.py;
+            // destX/destY == -1 이면 목적지 맵의 southEntry (기본 진입점) 사용
+            if (w.destX >= 0 && w.destY >= 0) {
+                state_.px = w.destX;
+                state_.py = w.destY;
+            } else {
+                state_.px = dest->southEntryX;
+                state_.py = dest->southEntryY;
+            }
+            pl_.mapId = state_.mapId;
+            pl_.x     = state_.px;
+            pl_.y     = state_.py;
             return;
         }
     }
@@ -207,11 +242,12 @@ bool Overworld::checkTrainerSight() {
             case 3: inSight = (dy == 0 && dx > 0 && dx <= tr.sightRange); break;  // 오른
         }
         if (inSight) {
-            state_.pendingEvent = OwEvent::TRAINER_BATTLE;
             state_.eventData = i;
-            // 체육관 보스는 BOSS_BATTLE
+            // 체육관 트레이너 index 2 이상 = 브록(BOSS)
             if (state_.mapId == MAP_PEWTER_GYM && i >= 2) {
                 state_.pendingEvent = OwEvent::BOSS_BATTLE;
+            } else {
+                state_.pendingEvent = OwEvent::TRAINER_BATTLE;
             }
             return true;
         }
@@ -290,54 +326,14 @@ void Overworld::update(Key key) {
 }
 
 // ─── 렌더 ────────────────────────────────────────────────────
+// render(): 배경(검정)만 세팅. 실제 타일 아트는 renderKorean()에서 printRaw로 출력.
 void Overworld::render() {
     int W = ren_.width;
     int H = ren_.height;
-
-    // 뷰포트: 맵 영역은 H-6 행, 대화창 6행
     int viewH = H - 6;
-    int viewW = W;
 
-    // 카메라: 플레이어 중심
-    int camX = state_.px - viewW / 2;
-    int camY = state_.py - viewH / 2;
-
-    MapDef* m = curMap();
-
-    // 맵 타일 렌더
-    for (int sy = 0; sy < viewH; sy++) {
-        for (int sx = 0; sx < viewW; sx++) {
-            int mx = camX + sx;
-            int my = camY + sy;
-            if (m && mx >= 0 && mx < MAP_W && my >= 0 && my < MAP_H) {
-                char t = getTile(m, mx, my);
-                // NPC/트레이너 위치 표시
-                bool hasNpc = false;
-                for (int i = 0; i < m->numNpcs; i++)
-                    if (m->npcs[i].x == mx && m->npcs[i].y == my) { hasNpc = true; break; }
-                bool hasTr = false;
-                for (int i = 0; i < m->numTrainers; i++)
-                    if (!m->trainers[i].defeated &&
-                        m->trainers[i].x == mx && m->trainers[i].y == my) { hasTr = true; break; }
-
-                if (mx == state_.px && my == state_.py) {
-                    // 플레이어
-                    ren_.setCell(sx, sy, '@',
-                        std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW);
-                } else if (hasNpc) {
-                    ren_.setCell(sx, sy, 'N',
-                        std::string(Color::BG_BLACK) + Color::BRIGHT_CYAN);
-                } else if (hasTr) {
-                    ren_.setCell(sx, sy, 'T',
-                        std::string(Color::BG_BLACK) + Color::BRIGHT_RED);
-                } else {
-                    drawTile(sx, sy, t);
-                }
-            } else {
-                ren_.setCell(sx, sy, ' ', std::string(Color::BG_BLACK) + Color::BLACK);
-            }
-        }
-    }
+    // 맵 영역: 검정 배경
+    ren_.fillRect(0, 0, W, viewH, ' ', std::string(Color::BG_BLACK) + Color::BLACK);
 
     // 대화창 박스 (하단 6행)
     int boxY = viewH;
@@ -354,10 +350,79 @@ void Overworld::renderKorean() {
 
     MapDef* m = curMap();
 
+    // ── 실제 타일 아트 렌더링 (pokered 스프라이트 기반) ──────────
+    // 타일 1개 = 4chars 너비 × 2행 (TILE_COLS=2 blocks × 2chars each, TILE_ROWS=2)
+    // 화면에 보이는 타일 수: tilesX = W/4, tilesY = viewH/2
+    {
+        int tilesX = W / 4;     // 가로 타일 수 (각 타일=4chars)
+        int tilesY = viewH / 2; // 세로 타일 수 (각 타일=2행)
+        int camX = state_.px - tilesX / 2;
+        int camY = state_.py - tilesY / 2;
+
+        for (int ty = 0; ty < tilesY; ty++) {
+            for (int tx = 0; tx < tilesX; tx++) {
+                int mx = camX + tx;
+                int my = camY + ty;
+                int sx = tx * 4;     // 터미널 X (각 타일 4chars)
+                int sy = ty * 2;     // 터미널 Y (각 타일 2행)
+
+                char tile_char = ' ';
+                bool isNpc = false, isTr = false;
+
+                if (m && mx >= 0 && mx < m->mapW && my >= 0 && my < m->mapH) {
+                    tile_char = getTile(m, mx, my);
+                    for (int i = 0; i < m->numNpcs; i++)
+                        if (m->npcs[i].x == mx && m->npcs[i].y == my) { isNpc = true; break; }
+                    for (int i = 0; i < m->numTrainers; i++)
+                        if (!m->trainers[i].defeated &&
+                            m->trainers[i].x == mx && m->trainers[i].y == my) { isTr = true; break; }
+                }
+
+                const TileArt* art = getTileArt(tile_char);
+
+                // NPC/트레이너는 바탕 타일 위에 오버레이 (renderKorean에서 처리)
+                for (int r = 0; r < TILE_ROWS && sy + r < viewH; r++) {
+                    if (art->rows[r]) ren_.printRaw(sx, sy + r, art->rows[r]);
+                }
+
+                // NPC 오버레이: 밝은 심볼 (타일 위에 그림)
+                if (isNpc) {
+                    ren_.printRaw(sx, sy,     "\x1b[1;36m N  \x1b[0m");
+                    ren_.printRaw(sx, sy + 1, "\x1b[1;36m/|\\ \x1b[0m");
+                } else if (isTr) {
+                    ren_.printRaw(sx, sy,     "\x1b[1;31m T  \x1b[0m");
+                    ren_.printRaw(sx, sy + 1, "\x1b[1;31m/|\\ \x1b[0m");
+                }
+            }
+        }
+    }
+
     // 맵 이름 (왼쪽 상단)
     if (m && m->nameW)
         ren_.printW(1, 0, m->nameW,
             std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
+
+    // ── 주인공 스프라이트 (방향 + 걷기 애니메이션) ───────────────
+    {
+        int tilesX = W / 4;
+        int tilesY = viewH / 2;
+        int camX = state_.px - tilesX / 2;
+        int camY = state_.py - tilesY / 2;
+        // 타일 좌표 → 터미널 좌표 변환 (타일 1개 = 4chars × 2rows)
+        int sx = (state_.px - camX) * 4;  // 터미널 X (4chars/tile)
+        int sy = (state_.py - camY) * 2;  // 터미널 Y (2rows/tile)
+
+        int dir = state_.dir;
+        // 걷기 애니메이션 (frame 8단위 토글)
+        int walkFrame = (state_.frame / 8) % 2;
+
+        // 3행 스프라이트 (sy-1=머리, sy=몸통, sy+1=다리), 3칸 너비, 타일 내 좌측 정렬
+        if (sy - 1 >= 0)
+            ren_.printRaw(sx, sy - 1, PLAYER_SPR[dir][walkFrame][0]);
+        ren_.printRaw(sx, sy,     PLAYER_SPR[dir][walkFrame][1]);
+        if (sy + 1 < viewH)
+            ren_.printRaw(sx, sy + 1, PLAYER_SPR[dir][walkFrame][2]);
+    }
 
     // NPC 대화
     if (state_.dialog.active && state_.dialog.npc) {

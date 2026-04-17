@@ -51,6 +51,9 @@ public:
     // 한국어 등 멀티바이트 문자열 직접 출력 (버퍼 우회, flush 후 호출)
     void printW(int x, int y, const std::wstring& text, const std::string& color = "");
 
+    // ANSI + UTF-8 포함 raw 문자열 직접 출력 (스프라이트용, flush 후 호출)
+    void printRaw(int x, int y, const char* utf8_ansi);
+
     // 박스 그리기 (ASCII +, -, |)
     void drawBox(int x, int y, int w, int h, const std::string& color = "");
 

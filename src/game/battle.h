@@ -6,19 +6,20 @@
 enum class BattleType { WILD, TRAINER, BOSS };
 
 enum class BattlePhase {
-    CHOOSE_ACTION,  // 커맨드 선택 (싸운다/가방/도망)
-    CHOOSE_MOVE,    // 기술 선택
-    CHOOSE_ITEM,    // 아이템 선택
-    EXECUTE_PLAYER, // 플레이어 행동 실행
-    EXECUTE_ENEMY,  // 적 행동 실행
-    SHOW_MSG,       // 메시지 표시 후 다음 단계로
-    LEVEL_UP_MSG,   // 레벨업 메시지
-    FAINT_PLAYER,   // 내 포켓몬 기절
-    FAINT_ENEMY,    // 적 포켓몬 기절
-    VICTORY,        // 승리
-    DEFEAT,         // 패배
-    ESCAPED,        // 도망
-    DONE,           // 배틀 종료 (다음 씬으로)
+    CHOOSE_ACTION,   // 커맨드 선택 (싸운다/가방/포켓몬/도망)
+    CHOOSE_MOVE,     // 기술 선택
+    CHOOSE_ITEM,     // 아이템 선택
+    CHOOSE_POKEMON,  // 파티에서 포켓몬 교체 선택
+    EXECUTE_PLAYER,  // 플레이어 행동 실행
+    EXECUTE_ENEMY,   // 적 행동 실행
+    SHOW_MSG,        // 메시지 표시 후 다음 단계로
+    LEVEL_UP_MSG,    // 레벨업 메시지
+    FAINT_PLAYER,    // 내 포켓몬 기절
+    FAINT_ENEMY,     // 적 포켓몬 기절
+    VICTORY,         // 승리
+    DEFEAT,          // 패배
+    ESCAPED,         // 도망
+    DONE,            // 배틀 종료 (다음 씬으로)
 };
 
 enum class BattleResult {
@@ -52,6 +53,9 @@ struct BattleState {
     int          expAmount;
     bool         leveledUp;
     int          newLevel;
+
+    bool         enemyWentFirst;   // static 제거 → 인스턴스 멤버
+    bool         switchAfterFaint; // 기절 후 강제 교체 여부
 
     int          frame;
 };
@@ -92,4 +96,5 @@ private:
     void checkLevelUp(Pokemon& p);
     int  chooseEnemyMove();
     void drawHPBar(int x, int y, int cur, int maxHP, const std::string& color);
+    void drawSprite(int x, int y, int speciesId, bool back);
 };
