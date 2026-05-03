@@ -1,4 +1,5 @@
 #include "game.h"
+#include "../data/sprites.h"
 #include <windows.h>
 #include <cstring>
 #include <cstdio>
@@ -10,38 +11,26 @@
 #endif
 
 // ─── 정적 데이터 ──────────────────────────────────────────────
-// 원작 대사 순서 (pokered 동일):
-// 0~4: 나레이션, 5: 이름 확인(동적), 6~8: 라이벌 소개, 9: 라이벌 이름 확인(동적), 10~11: 마무리
-// nullptr = 동적으로 swprintf 처리
+// pokered 원본 OakSpeechText 번역 (engine/movie/oak_speech + data/text/text_2.asm)
+// 0~3: 오박사 자기소개+포켓몬 설명, 4: 이름 묻기 → NAME_INPUT,
+// 5: 이름 확인(동적), 6~7: 라이벌 소개, 8: 라이벌 이름 묻기 → RIVAL_NAME_INPUT,
+// 9: 라이벌 이름 확인(동적), 10~11: 마무리 → OVERWORLD
 const wchar_t* Game::INTRO_LINES[Game::INTRO_COUNT] = {
-    L"이 세계에는 포켓몬이라 불리는 생물이 서식하고 있습니다!",   // 0
-    L"어떤 사람들에게 포켓몬은 애완동물이기도 합니다.",            // 1
-    L"어떤 사람들은 포켓몬을 싸움에 사용하기도 하죠.",             // 2
-    L"나는... 포켓몬을 연구하는 사람입니다.",                      // 3
-    L"그런데 당신은 누구입니까? 먼저 이름을 알려주세요.",          // 4  → NAME_INPUT
-    nullptr,                                                        // 5  → "그렇군요! [이름]이군요!" (동적)
-    L"그리고 이 아이는 나의 손자입니다.",                          // 6
-    L"태어날 때부터 당신의 라이벌이었지요.",                       // 7
-    L"...음, 이름이 뭐였더라?",                                    // 8  → RIVAL_NAME_INPUT
-    nullptr,                                                        // 9  → "맞아! [라이벌]이야!" (동적)
-    L"당신만의 포켓몬 전설이 지금 시작되려 하고 있습니다!",        // 10
-    L"꿈과 모험이 가득한 포켓몬 세계로, 출발!",                    // 11 → STARTER_SELECT
+    L"안녕! 포켓몬의 세계에 잘 왔어!",                                  // 0
+    L"내 이름은 「오박사」. 사람들은 나를 포켓몬 박사라고도 부른단다.",  // 1
+    L"이 세상엔 포켓몬이라 불리는 신비한 생물들이 함께 살고 있단다.",   // 2
+    L"어떤 이에겐 포켓몬은 친구이고, 어떤 이는 시합 동료로 키우지.",    // 3
+    L"나는 말이지... 포켓몬을 연구하는 사람이란다. 자, 이름이 뭐니?",  // 4  → NAME_INPUT
+    nullptr,                                                             // 5  → "그래! 네 이름은 OO구나!" (동적)
+    L"이 아이는 내 손자란다.",                                          // 6
+    L"갓난아기 때부터 너의 라이벌이었지.",                              // 7
+    L"...어라, 이 녀석 이름이 뭐였더라?",                                // 8  → RIVAL_NAME_INPUT
+    nullptr,                                                             // 9  → "맞다! 이제 생각났어. 이 녀석 이름은 OO!" (동적)
+    L"너만의 포켓몬 전설이 이제 막 펼쳐지려 하고 있어!",                 // 10
+    L"꿈과 모험이 가득한 포켓몬의 세계로! 자, 가자!",                    // 11 → OVERWORLD
 };
 
-const char* Game::OAK_SPRITE[12] = {
-    "    .------.",
-    "   / O    O \\",
-    "  |    __    |",
-    "  |  (____) |",
-    "   \\        /",
-    "    `------'",
-    "      |  |",
-    "   ___|  |___",
-    "  |   \\  /   |",
-    "  |    \\/    |",
-    "       ||",
-    "      /  \\",
-};
+// (구) 인라인 데포르메 OAK_SPRITE 폐기 — 이제 sprites.h의 SPR_INTRO_OAK 사용
 
 const wchar_t* Game::DEX_LINES[5] = {
     L"아, 잠깐! 줄 것이 있어!",
@@ -52,10 +41,10 @@ const wchar_t* Game::DEX_LINES[5] = {
 };
 
 const wchar_t* Game::LAB_INTRO_LINES[Game::LAB_INTRO_COUNT] = {
-    L"Oak: 나에게는 연구에 사용하던 세 마리의 포켓몬이 있어.",
-    L"Oak: 저 테이블 위 몬스터볼에 들어있지. 하나를 골라라!",
-    L"블루: 저도 하나 가져가겠습니다!",
-    L"Oak: 자, 어서 골라봐!",
+    L"오박사: 나에겐 연구에 쓰던 세 마리의 포켓몬이 있단다.",
+    L"오박사: 테이블 위 몬스터볼 안에 있어. 하나 골라봐!",
+    L"블루: 할아버지! 저도 하나 가져갈게요!",
+    L"오박사: 자, 어떤 녀석이 마음에 드니?",
 };
 
 // ─── 초기화 ──────────────────────────────────────────────────
@@ -95,9 +84,9 @@ void Game::run() {
         }
 
         renderer.clear();
-        render();
-        renderer.flush();
-        renderKorean();
+        render();          // buffer 기반 배경/박스
+        renderKorean();    // 타일/스프라이트(printRaw → 버퍼) + 한국어 텍스트(printW 직접)
+        renderer.flush();  // 모든 버퍼 컨텐츠 diff 출력 — 마지막에 1번만
 
         DWORD elapsed = GetTickCount() - start;
         if (elapsed < (DWORD)FRAME_MS)
@@ -109,6 +98,8 @@ void Game::run() {
 void Game::changeScene(Scene next) {
     scene_ = next;
     frame_ = 0;
+    // 잔여 텍스트(printW 직접 출력) 정리 + 강제 재렌더
+    renderer.redrawAll();
 }
 
 // ─── 씬 라우팅 ───────────────────────────────────────────────
@@ -302,10 +293,12 @@ void Game::updateIntro(Key key) {
         memset(rivalNameBuf_, 0, sizeof(rivalNameBuf_));
         return;
     }
-    // step 11 (마지막): → OVERWORLD (주인공 집 2층 시작 - 원작과 동일)
+    // step 11 (마지막): → OVERWORLD (주인공 집 2층 침실에서 깨어남 — 원작과 동일)
     if (introStep_ == 11) {
-        player_.x = 4; player_.y = 4;  // 집 내부 중앙 (8×8 맵)
-        player_.mapId = MAP_PLAYER_HOUSE;
+        player_.mapId = MAP_PLAYER_HOUSE2;
+        player_.x = 4; player_.y = 4;   // 침대 옆 floor
+        player_.dir = 0;
+        player_.justWokeUp = false;     // 깨어나는 대사 X — pokered 원작처럼 그냥 등장
         if (!ow_) ow_ = new Overworld(renderer, player_);
         ow_->init();
         changeScene(Scene::OVERWORLD);
@@ -313,70 +306,79 @@ void Game::updateIntro(Key key) {
     }
 
     introStep_++;
+    // 단계 바뀔 때 화면 새로 그리기 — 이전 스프라이트/텍스트 잔영 제거
+    renderer.redrawAll();
+}
+
+// 인트로 트레이너 풀바디 스프라이트 출력 (28chars × 9rows)
+static void drawIntroSprite(Renderer& r, const IntroSprite& spr, int x, int y) {
+    for (int i = 0; i < INTRO_SPR_H; i++) {
+        if (spr.rows[i]) r.printRaw(x, y + i, spr.rows[i]);
+    }
 }
 
 void Game::renderIntro() {
     int W = renderer.width, H = renderer.height;
     renderer.fillRect(0,0,W,H,' ', std::string(Color::BG_BLACK)+Color::BLACK);
 
-    int cx = W/2, cy = H/2 - 3;
+    int cx = W/2;
+    int bH=6, bY=H-bH-1, bW=W-4, bX=2;     // 대화창 위치
+    int spriteAreaH = bY;                    // 그림 영역(대화창 위) 세로
 
-    if (introStep_ <= 2) {
-        // 단계 0~2: 포켓몬 세계 풍경 (타이틀)
-        renderer.print(cx-10, cy-2, "~~~~~~~~~~~~~~~~~~",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_BLUE);
-        renderer.print(cx-10, cy-1, " TTTTTTT  TTTTTTT ",
-            std::string(Color::BG_BLACK)+Color::GREEN);
-        renderer.print(cx-10, cy,   "  TTTTT    TTTTT  ",
-            std::string(Color::BG_BLACK)+Color::GREEN);
-        renderer.print(cx-8,  cy+1, "..  ;;  ..  ;;  ..",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_GREEN);
-        renderer.print(cx-8,  cy+2, "..  ;;  ..  ;;  ..",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_GREEN);
-        renderer.print(cx-7,  cy-4, "* POKEMON  RED *",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_RED);
-    } else if (introStep_ <= 4) {
-        // 단계 3~4: 오박사 등장
-        int sprX = cx - 8, sprY = cy - 6;
-        for (int i = 0; i < 12; i++)
-            renderer.print(sprX, sprY+i, OAK_SPRITE[i],
-                std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
-        renderer.print(cx-5, cy+7, "Prof. OAK",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW);
-    } else if (introStep_ <= 8) {
-        // 단계 5~8: 오박사 + 라이벌 소개
-        int sprX = cx - 14, sprY = cy - 5;
-        for (int i = 0; i < 12; i++)
-            renderer.print(sprX, sprY+i, OAK_SPRITE[i],
-                std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
-        // 라이벌 실루엣
-        renderer.print(cx+2, cy-2, "  .--.",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
-        renderer.print(cx+2, cy-1, " /O  O\\",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
-        renderer.print(cx+2, cy,   " | -- |",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
-        renderer.print(cx+2, cy+1, " \\    /",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
-        renderer.print(cx+2, cy+2, "  `--'",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
-        renderer.print(cx+3, cy+3, "RIVAL",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
-    } else {
-        // 단계 9~11: 마무리
-        int sprX = cx - 8, sprY = cy - 5;
-        for (int i = 0; i < 12; i++)
-            renderer.print(sprX, sprY+i, OAK_SPRITE[i],
-                std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
-        renderer.print(cx-6, cy+8, "* * * * * *",
-            std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW);
+    // 스프라이트는 대화창 바로 위에 위치 (하단 5행은 대화창 뒤로 가려짐)
+    int sprY = bY - INTRO_SPR_H + 5;
+    if (sprY < 1) sprY = 1;
+    int halfW = INTRO_SPR_W / 2;
+
+    // ── 스프라이트 (단계 3+) ────────────────────────────────────
+    if (introStep_ >= 3 && introStep_ <= 4) {
+        drawIntroSprite(renderer, SPR_INTRO_OAK, cx - halfW, sprY);
+    } else if (introStep_ == 5) {
+        drawIntroSprite(renderer, SPR_INTRO_RED, cx - halfW, sprY);
+    } else if (introStep_ >= 6 && introStep_ <= 9) {
+        drawIntroSprite(renderer, SPR_INTRO_RIVAL, cx - halfW, sprY);
+    } else if (introStep_ >= 10) {
+        drawIntroSprite(renderer, SPR_INTRO_RED, cx - halfW, sprY);
     }
 
-    // 대화창
-    int bH=6, bY=H-bH-1, bW=W-4, bX=2;
+    // ── 타이틀 화면 (단계 0~2): 큰 블록 글자 ─────────────────────
+    if (introStep_ <= 2) {
+        // POKEMON (7글자) — 각 글자 6 wide, 5 rows
+        static const char* T_POKEMON[5] = {
+            "#####  ####  ## ##  #####  ##   ##  ####  ##  ##",
+            "##  ## ## ## ####   ##     ## # ## ##  ## ### ##",
+            "#####  ## ## ###    ###    ##   ## ##  ## ######",
+            "##     ## ## ## ##  ##     ##   ## ##  ## ## ###",
+            "##      ####  ##  ## #####  ##   ##  ####  ##  ##",
+        };
+        // RED (3글자)
+        static const char* T_RED[5] = {
+            "#####  #####  #####",
+            "##  ## ##     ##  ##",
+            "#####  ###    ##  ##",
+            "## ##  ##     ##  ##",
+            "##  ## #####  #####",
+        };
+        int titleW = 49;       // POKEMON 줄 길이
+        int titleH = 5 + 1 + 5; // 11 rows
+        int titleY = (spriteAreaH - titleH) / 2;
+        if (titleY < 1) titleY = 1;
+        // POKEMON
+        for (int i = 0; i < 5; i++)
+            renderer.print(cx - titleW/2, titleY + i, T_POKEMON[i],
+                std::string(Color::BG_BLACK)+Color::BRIGHT_RED);
+        // RED (가운데 정렬, 한 줄 띄움)
+        int redW = 19;
+        for (int i = 0; i < 5; i++)
+            renderer.print(cx - redW/2, titleY + 6 + i, T_RED[i],
+                std::string(Color::BG_BLACK)+Color::BRIGHT_RED);
+    }
+
+    // ── 대화창 ───────────────────────────────────────────────────
     renderer.drawBox(bX,bY,bW,bH, std::string(Color::BG_BLACK)+Color::WHITE);
     renderer.fillRect(bX+1,bY+1,bW-2,bH-2,' ',std::string(Color::BG_BLACK)+Color::WHITE);
-    renderer.print(bX+2,bY+1,"[OAK]",
+    const char* speaker = "[OAK]";
+    renderer.print(bX+2,bY+1,speaker,
         std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW);
     if ((frame_/8)%2==0)
         renderer.print(bX+bW-4,bY+bH-2," v ",
@@ -390,17 +392,20 @@ void Game::renderIntroKorean() {
     int bH=6, bY=H-bH-1, bX=2;
     if (introStep_ >= INTRO_COUNT) return;
 
-    // step 5: "그렇군요! [이름]이군요!" — 동적 생성
+    // (스프라이트는 renderIntro에서 그려짐 — 대화창 뒤 레이어)
+
+    // ── 대화창 텍스트 ─────────────────────────────────────────
+    // step 5: 이름 확인 (pokered _YourNameIsText: "Right! So your name is X!")
     if (introStep_ == 5) {
         wchar_t buf[64];
-        swprintf(buf, 64, L"그렇군요! 이름은 %ls이군요!", player_.name);
+        swprintf(buf, 64, L"그래! 네 이름은 %ls구나!", player_.name);
         renderer.printW(bX+2, bY+3, buf, std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
         return;
     }
-    // step 9: "맞아! [라이벌]이야!" — 동적 생성
+    // step 9: 라이벌 이름 확인 (pokered _HisNameIsText: "That's right! I remember now! His name is X!")
     if (introStep_ == 9) {
         wchar_t buf[64];
-        swprintf(buf, 64, L"맞아! 이름은 %ls이야!", player_.rivalName);
+        swprintf(buf, 64, L"맞다! 이제 생각났어. 이 녀석 이름은 %ls!", player_.rivalName);
         renderer.printW(bX+2, bY+3, buf, std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
         return;
     }
@@ -442,7 +447,7 @@ void Game::renderNameInput() {
 void Game::renderNameInputKorean() {
     int W = renderer.width, H = renderer.height;
     int bY=H/2-4, bX=(W-40)/2;
-    renderer.printW(bX+2, bY+2, L"이름을 입력하세요 (최대 8자):",
+    renderer.printW(bX+2, bY+2, L"네 이름을 알려주겠니? (최대 8자)",
         std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
     // 현재 입력 표시
     wchar_t disp[64] = L"> ";
@@ -450,7 +455,7 @@ void Game::renderNameInputKorean() {
     disp[2+nameLen_] = 0;
     if ((frame_/8)%2==0) { disp[2+nameLen_]='_'; disp[3+nameLen_]=0; }
     renderer.printW(bX+2, bY+4, disp, std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
-    renderer.printW(bX+2, bY+6, L"[ Enter: 확인 / 공백시 RED ]",
+    renderer.printW(bX+2, bY+6, L"[ Enter: 확인 / 비우면 RED ]",
         std::string(Color::BG_BLACK)+Color::BRIGHT_BLACK);
 }
 
@@ -486,7 +491,7 @@ void Game::renderRivalNameInput() {
 void Game::renderRivalNameInputKorean() {
     int W = renderer.width, H = renderer.height;
     int bY=H/2-4, bX=(W-40)/2;
-    renderer.printW(bX+2, bY+2, L"라이벌의 이름을 입력하세요 (최대 8자):",
+    renderer.printW(bX+2, bY+2, L"라이벌의 이름은 뭘로 할까? (최대 8자)",
         std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
     wchar_t disp[64] = L"> ";
     for (int i = 0; i < rivalNameLen_; i++)
@@ -494,7 +499,7 @@ void Game::renderRivalNameInputKorean() {
     disp[2+rivalNameLen_] = 0;
     if ((frame_/8)%2==0) { disp[2+rivalNameLen_]='_'; disp[3+rivalNameLen_]=0; }
     renderer.printW(bX+2, bY+4, disp, std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
-    renderer.printW(bX+2, bY+6, L"[ Enter: 확인 / 공백시 블루 ]",
+    renderer.printW(bX+2, bY+6, L"[ Enter: 확인 / 비우면 블루 ]",
         std::string(Color::BG_BLACK)+Color::BRIGHT_BLACK);
 }
 

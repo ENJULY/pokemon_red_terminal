@@ -1,55 +1,63 @@
 @echo off
 cd /d "%~dp0"
+setlocal
 
-echo ============================================
-echo  PokemonRed - Build Script
-echo ============================================
+:: ====== MinGW 경로 ======
+set MGW=C:\mingw64
+set GXX=%MGW%\bin\g++.exe
+set MGW_LIBEXEC=%MGW%\libexec\gcc\x86_64-w64-mingw32\15.1.0\
+set MGW_TLIB=%MGW%\x86_64-w64-mingw32\lib\
 
-:: 컴파일러 탐색 순서: mingw64(GCC 15) 우선
-set GXX=
-if exist "C:\mingw64\bin\g++.exe"  set GXX=C:\mingw64\bin\g++.exe
-if not defined GXX if exist "C:\msys64\mingw64\bin\g++.exe" set GXX=C:\msys64\mingw64\bin\g++.exe
-if not defined GXX if exist "C:\msys2\mingw64\bin\g++.exe"  set GXX=C:\msys2\mingw64\bin\g++.exe
+:: 깨진 C:\MinGW (구 6.3.0) 우선 차단 — 새 mingw64를 PATH 맨 앞으로
+set PATH=%MGW%\bin;%PATH%
 
-:: 구형 MinGW(GCC 6.x)는 C++17 inline 변수 미지원 → 빌드 불가
-:: C:\MinGW 는 의도적으로 사용하지 않습니다.
-
-if not defined GXX (
-    echo.
-    echo [ERROR] C++17을 지원하는 g++를 찾지 못했습니다.
-    echo  - MinGW-w64 설치 필요: https://winlibs.com 에서 GCC 14+ Win64 다운로드
-    echo  - 압축 해제 후 C:\mingw64 에 놓으면 됩니다.
-    echo.
+if not exist "%GXX%" (
+    echo [ERROR] %GXX% not found
     pause
     exit /b 1
 )
 
-echo [INFO] 컴파일러: %GXX%
-for /f "tokens=*" %%v in ('"%GXX%" --version 2^>^&1 ^| findstr /i "g++"') do echo [INFO] 버전: %%v
+echo ============================================
+echo  PokemonRed - Build
+echo ============================================
+echo Compiler: %GXX%
+"%GXX%" --version | findstr /i "g++"
+
+:: 실행 중인 게임 종료 (exe 잠금 방지)
+taskkill /F /IM PokemonRed.exe 2>/dev/null
 
 if not exist build mkdir build
 
 echo.
-echo Building...
-"%GXX%" -std=c++17 ^
-  src/main.cpp ^
-  src/engine/renderer.cpp ^
-  src/engine/input.cpp ^
-  src/engine/audio.cpp ^
-  src/game/game.cpp ^
-  src/game/battle.cpp ^
-  src/game/overworld.cpp ^
-  -o build/PokemonRed.exe ^
-  -lwinmm -I src -mconsole -DUNICODE -D_UNICODE ^
-  -static -static-libgcc -static-libstdc++
+echo Compiling...
+"%GXX%" -std=c++17 -B"%MGW_LIBEXEC%" -B"%MGW_TLIB%" src\main.cpp src\engine\renderer.cpp src\engine\input.cpp src\engine\audio.cpp src\game\game.cpp src\game\battle.cpp src\game\overworld.cpp -o build\PokemonRed.exe -lwinmm -I src -mconsole -DUNICODE -D_UNICODE -static -static-libgcc -static-libstdc++
+set BUILDRC=%errorlevel%
 
-if %errorlevel% neq 0 (
+echo.
+echo Compiler exit code: %BUILDRC%
+
+if %BUILDRC% neq 0 (
     echo.
-    echo [FAILED] 빌드 실패
+    echo [FAILED] Build failed
     pause
     exit /b 1
 )
 
+if not exist build\PokemonRed.exe (
+    echo [FAILED] exe not produced
+    pause
+    exit /b 1
+)
+
+:: DLL 백업 복사 (정적 링크 실패 시 대비)
+if exist "%MGW%\bin\libwinpthread-1.dll" copy /Y "%MGW%\bin\libwinpthread-1.dll" build\ >/dev/null
+if exist "%MGW%\bin\libgcc_s_seh-1.dll"  copy /Y "%MGW%\bin\libgcc_s_seh-1.dll"  build\ >/dev/null
+if exist "%MGW%\bin\libstdc++-6.dll"     copy /Y "%MGW%\bin\libstdc++-6.dll"     build\ >/dev/null
+
 echo.
-echo [OK] 빌드 성공 - 실행 중...
+echo [OK] Build succeeded
+echo Running...
 build\PokemonRed.exe
+echo.
+echo Game exit code: %errorlevel%
+pause

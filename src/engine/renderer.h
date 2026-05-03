@@ -28,11 +28,10 @@ namespace Color {
     constexpr const char* BG_RED         = "\033[41m";
 }
 
-// 버퍼 셀: ASCII 문자 1개 + 색상
+// 버퍼 셀: 가시 문자 1개(멀티바이트 UTF-8 지원) + ANSI 색상 코드
 struct Cell {
-    char        ch    = ' ';
-    std::string color = "";
-    bool        dirty = true;
+    std::string ch    = " ";  // 보이는 글자 1개 (▀ ▄ 같은 3-byte UTF-8 가능)
+    std::string color = "";   // ANSI 색상 sequence (ex: "\x1b[48;5;106m")
 };
 
 class Renderer {
@@ -45,13 +44,17 @@ public:
     // ASCII 문자 1개 셀에 쓰기
     void setCell(int x, int y, char ch, const std::string& color = "");
 
+    // 멀티바이트 UTF-8 1글자(▀ 등) 셀에 쓰기
+    void setCellU(int x, int y, const std::string& utf8, const std::string& color = "");
+
     // ASCII 문자열 한 줄 쓰기 (1바이트 문자만)
     void print(int x, int y, const std::string& text, const std::string& color = "");
 
     // 한국어 등 멀티바이트 문자열 직접 출력 (버퍼 우회, flush 후 호출)
     void printW(int x, int y, const std::wstring& text, const std::string& color = "");
 
-    // ANSI + UTF-8 포함 raw 문자열 직접 출력 (스프라이트용, flush 후 호출)
+    // ANSI+UTF-8 raw 문자열을 셀 단위로 파싱하여 버퍼에 저장.
+    // (구) flush 우회 출력 → (현) 버퍼 경유 → flush diff로 깜빡임 없음
     void printRaw(int x, int y, const char* utf8_ansi);
 
     // 박스 그리기 (ASCII +, -, |)
@@ -63,8 +66,12 @@ public:
     // 변경된 셀만 출력 (더블버퍼링)
     void flush();
 
-    // 버퍼 전체 공백으로 초기화 (dirty 표시)
+    // 버퍼 전체 공백으로 초기화 (다음 flush에서 모든 셀이 새 내용)
     void clear();
+
+    // prev_를 무효화하여 다음 flush가 모든 셀을 강제 재출력하게 함.
+    // 씬 전환 시 호출 (printW로 그려진 잔여 텍스트도 같이 지움).
+    void redrawAll();
 
 private:
     std::vector<Cell> curr_;

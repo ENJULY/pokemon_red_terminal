@@ -36,6 +36,14 @@ struct OwState {
     int     eventData;      // 트레이너 인덱스 등
     int     wildSpeciesId;
     int     wildLevel;
+
+    // 깨어나는 시퀀스 (인트로 종료 직후 1회 재생)
+    int     wakeStep;       // 0=비활성, 1~N=대사 단계
+
+    // 걷기 애니메이션 (한 타일 슬라이드)
+    int     moving;         // 남은 애니메이션 프레임 (0=정지)
+    int     stepDx, stepDy; // 현재 진행 중인 걸음의 방향 (-1,0,+1)
+    int     walkStep;       // 누적 걸음수 (포즈 토글용)
 };
 
 class Overworld {

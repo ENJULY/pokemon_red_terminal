@@ -73,34 +73,42 @@ static const int MAP_PEWTER_GYM = 8;
 static const int MAP_PLAYER_HOUSE2 = 9;
 static const int MAP_RIVAL_HOUSE   = 10;
 
-// ─── Pallet Town (20×18) ─────────────────────────────────────
+// 실내 맵 ID — 맵 외곽 영역을 풀밭 대신 검정으로 렌더링
+inline bool isIndoorMap(int id) {
+    return id == MAP_OAK_LAB || id == MAP_PLAYER_HOUSE ||
+           id == MAP_PLAYER_HOUSE2 || id == MAP_PEWTER_GYM ||
+           id == MAP_RIVAL_HOUSE;
+}
+
+// ─── Pallet Town (20×18) — pokered PalletTown.blk 원본 ─────────
 inline MapDef MAP_0 = {
     MAP_PALLET, 20, 18,
     "Pallet Town", L"팔레트시티",
     {
-        "   #     #;;#     # ",
-        "##########;;########",
-        "#                  #",
-        "#   ####    ####   #",
-        "#   ####    ####   #",
-        "#  s#D##   s#D##   #",
-        "#                  #",
-        "#                  #",
-        "#         ######   #",
-        "#   ###s  ######   #",
-        "#         ######   #",
-        "#         ##D###   #",
-        "#                  #",
-        "#         ###s##   #",
-        "#                  #",
-        "#   #~~            #",
-        "#   #~~            #",
-        "##  #~~ ############",
+        "00010000012210000010",
+        "11111111112211111111",
+        "10343434343434343401",
+        "10435667434356674301",
+        "10889DEF34889DEF3401",
+        "108GHIJK438GHIJK4301",
+        "10343434343434343401",
+        "10434343434343434301",
+        "1034888834LMMMMN3401",
+        "1043OOOG43PQQQQR4301",
+        "1034SSSS34TUVWXY3401",
+        "1043ZZZZ43!JIJJ@4301",
+        "10343434348888888801",
+        "1043434343OOOGOO8801",
+        "1000$%%^88SSSS008801",
+        "1000&**(88ZZZZ008801",
+        "1000&**(888888888801",
+        "1100&**(111111111111",
         nullptr
     },
     {}, 0,  // npcs
     {}, 0,  // trainers
     {
+        // pokered PalletTown.asm 원본 위치
         {5, 5, MAP_PLAYER_HOUSE, -1, -1},
         {13, 5, MAP_RIVAL_HOUSE, -1, -1},
         {12, 11, MAP_OAK_LAB, -1, -1},
@@ -420,26 +428,64 @@ inline MapDef MAP_7 = {
     MAP_PLAYER_HOUSE, 8, 8,
     "Player's House", L"주인공의 집",
     {
-        "      DD",
-        "   s  DD",
-        "        ",
-        "        ",
-        "        ",
-        "        ",
-        "        ",
-        "  DD    ",
+        "qqrsrsrs",
+        "ttuvuuuw",
+        "uuuuuuuu",
+        "uuuuuuuu",
+        "uuxyzxuu",
+        "uuxABxuu",
+        "uuuuuuuu",
+        "uuCCuuuu",
+        nullptr
+    },
+    {
+        // Mom NPC at (5,4) — pokered 원본 위치 (RedsHouse1F.asm)
+        {5, 4, {
+            L"엄마: 그래. 남자애는 언젠가 집을 떠난다지.",
+            L"엄마: TV에서 그러더라.",
+            L"엄마: 옆집의 오박사님이 너를 찾고 계셔.",
+            nullptr
+        }},
+    }, 1,  // npcs
+    {}, 0,  // trainers
+    {
+        // 정문 (2,7), (3,7) → 팔레트시티 (5,6) — 플레이어 집(5,5) 바로 아래
+        {2, 7, MAP_PALLET, 5, 6},
+        {3, 7, MAP_PALLET, 5, 6},
+        // 사다리 'w' (7,1) → 2F (7,2)
+        {7, 1, MAP_PLAYER_HOUSE2, 7, 2},
+    }, 3,  // warps
+    {}, 0,  // no encounters
+    -1, MAP_PALLET,  // north/south
+    3, 7, 3, 7,  // entry: 팔레트→1F 도착시 (3,7) (정문)
+    nullptr  // bgm
+};
+
+// ─── Player's Bedroom 2F (12×10) ─────────────────────────────────
+// 사방에 벽(#), 좌측 상단 침대(bb), 컴퓨터(p), TV(s), 우측 상단 계단(D).
+inline MapDef MAP_9 = {
+    MAP_PLAYER_HOUSE2, 8, 8,
+    "Player's Bedroom", L"주인공의 방",
+    {
+        "abcddede",
+        "fghiiiij",
+        "iiiiiiii",
+        "iiiiiiii",
+        "iiikiiii",
+        "iiiliiii",
+        "miiiiini",
+        "oiiiiipi",
         nullptr
     },
     {}, 0,  // npcs
     {}, 0,  // trainers
     {
-        {2, 7, MAP_PALLET, -1, -1},
-        {3, 7, MAP_PALLET, -1, -1},
-        {7, 1, MAP_PLAYER_HOUSE2, -1, -1},
-    }, 3,  // warps
+        // 사다리 'j' (7,1) → 1F (7,2). 사다리 밟으면 즉시 워프
+        {7, 1, MAP_PLAYER_HOUSE, 7, 2},
+    }, 1,  // warps
     {}, 0,  // no encounters
-    -1, MAP_PALLET,  // north/south
-    4, 7, 4, 0,  // entry points
+    -1, MAP_PLAYER_HOUSE,  // north/south
+    7, 2, 7, 2,  // entry: 1F→2F 도착시 (7,2) (사다리 한 칸 아래)
     nullptr  // bgm
 };
 
@@ -477,6 +523,7 @@ inline MapDef MAP_8 = {
 };
 
 // ─── 전체 맵 배열 ────────────────────────────────────────────
+// ALL_MAPS의 인덱스 = MAP_xxx 상수값. (MAP_PLAYER_HOUSE=7, MAP_PEWTER_GYM=8, MAP_PLAYER_HOUSE2=9)
 inline MapDef* ALL_MAPS[] = {
     &MAP_0,
     &MAP_1,
@@ -487,8 +534,9 @@ inline MapDef* ALL_MAPS[] = {
     &MAP_6,
     &MAP_7,
     &MAP_8,
+    &MAP_9,
 };
-inline constexpr int NUM_MAPS = 9;
+inline constexpr int NUM_MAPS = 10;
 
 inline MapDef* getMap(int id) {
     if (id >= 0 && id < NUM_MAPS) return ALL_MAPS[id];
@@ -496,7 +544,12 @@ inline MapDef* getMap(int id) {
 }
 
 inline bool tileWalkable(char t) {
-    return t == ' ' || t == '.' || t == ',' || t == ';';
+    // 야외 야생: ' '/.,/;
+    // 실내 floor: 'i'(R2F) 'u'(R1F) 'j' 'w' (사다리)
+    // PalletTown: '0' '1' '3' '4' (잔디/길/floor patterns)
+    return t == ' ' || t == '.' || t == ',' || t == ';'
+        || t == 'i' || t == 'u' || t == 'j' || t == 'w'
+        || t == '0' || t == '1' || t == '3' || t == '4';
 }
 inline bool tileIsEncounter(char t) { return t == ';'; }
 

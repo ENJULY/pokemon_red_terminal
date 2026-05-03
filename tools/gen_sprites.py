@@ -230,6 +230,273 @@ lines.append("    default: return nullptr;")
 lines.append("    }")
 lines.append("}")
 
+# ─── 인트로용 큰 트레이너 스프라이트 ───────────────────────────
+# 인트로의 Oak / Rival / Red 풀바디 그림은 데포르메가 아닌
+# 트레이너 배틀 스프라이트(56×56px)를 그대로 사용. 회색 4단계.
+INTRO_OUT_W = 56
+INTRO_OUT_H = 56  # 28 half-block rows — 56×56 원본 보존 (NO 리사이즈, 픽셀-퍼펙트)
+INTRO_TARGETS = [
+    ("trainers/prof.oak", "OAK",   "오박사"),
+    ("trainers/rival1",   "RIVAL", "라이벌(블루)"),
+    ("player/red",        "RED",   "레드"),
+]
+
+def intro_classify(px):
+    r, g, b, a = px
+    if a < 64: return -1   # 알파 0 (실제 투명)만 배경 처리
+    br = 0.299*r + 0.587*g + 0.114*b
+    if br > 200: return 0  # 흰색 (인물 몸통 내부) — 실제 색으로 렌더
+    if br > 130: return 1  # 밝은 회색
+    if br > 60:  return 2  # 중간 회색
+    return 3               # 검정 / 외곽선
+
+# GB 4단계 회색 팔레트 (ANSI 256색)
+INTRO_FG_WHITE = "38;5;255"
+INTRO_FG_LIGHT = "38;5;250"
+INTRO_FG_MID   = "38;5;244"
+INTRO_FG_DARK  = "38;5;232"
+INTRO_BG_WHITE = "48;5;255"
+INTRO_BG_LIGHT = "48;5;250"
+INTRO_BG_MID   = "48;5;244"
+INTRO_BG_DARK  = "48;5;232"
+INTRO_BG_BLK   = "48;5;0"
+
+def intro_fg(cls):
+    if cls < 0: return "38;5;0"
+    if cls == 0: return INTRO_FG_WHITE
+    if cls == 1: return INTRO_FG_LIGHT
+    if cls == 2: return INTRO_FG_MID
+    return INTRO_FG_DARK
+
+def intro_bg(cls):
+    if cls < 0: return INTRO_BG_BLK
+    if cls == 0: return INTRO_BG_WHITE
+    if cls == 1: return INTRO_BG_LIGHT
+    if cls == 2: return INTRO_BG_MID
+    return INTRO_BG_DARK
+
+def intro_half_block(top, bot):
+    top_t = (top < 0)
+    bot_t = (bot < 0)
+    if top_t and bot_t:
+        return f"\033[{INTRO_BG_BLK}m "
+    elif top_t:
+        return f"\033[{INTRO_BG_BLK};{intro_fg(bot)}m▄"
+    elif bot_t:
+        return f"\033[{INTRO_BG_BLK};{intro_fg(top)}m▀"
+    elif top == bot:
+        return f"\033[{intro_bg(top)}m "
+    else:
+        return f"\033[{intro_fg(top)};{intro_bg(bot)}m▀"
+
+def remove_outside_bg(img):
+    """모서리부터 flood fill — 인물 외부의 흰색만 알파 0으로 마킹.
+    몸통 내부에 갇힌 흰색은 그대로 유지 (외곽선이 가둬서 도달 불가)."""
+    img = img.convert("RGBA").copy()
+    px = img.load()
+    w, h = img.size
+    if w == 0 or h == 0:
+        return img
+    # 코너 픽셀의 색을 배경 기준으로 (보통 흰색 255,255,255)
+    bg = px[0, 0]
+    if bg[3] < 64:
+        return img  # 이미 투명
+    visited = [[False]*h for _ in range(w)]
+    stack = [(0,0),(w-1,0),(0,h-1),(w-1,h-1)]
+    while stack:
+        x, y = stack.pop()
+        if x < 0 or x >= w or y < 0 or y >= h: continue
+        if visited[x][y]: continue
+        p = px[x, y]
+        if abs(p[0]-bg[0]) > 10 or abs(p[1]-bg[1]) > 10 or abs(p[2]-bg[2]) > 10:
+            continue
+        visited[x][y] = True
+        px[x, y] = (0, 0, 0, 0)  # 투명
+        stack.extend([(x+1,y),(x-1,y),(x,y+1),(x,y-1)])
+    return img
+
+def convert_intro_sprite(img):
+    img = remove_outside_bg(img)
+    img = img.resize((INTRO_OUT_W, INTRO_OUT_H), Image.NEAREST)
+    rows = []
+    for hy in range(INTRO_OUT_H // 2):
+        py0 = hy*2
+        py1 = hy*2 + 1
+        row = ""
+        for x in range(INTRO_OUT_W):
+            t = intro_classify(img.getpixel((x, py0)))
+            b = intro_classify(img.getpixel((x, py1)))
+            row += intro_half_block(t, b)
+        row += "\033[0m"
+        rows.append(row)
+    return rows
+
+INTRO_BASE = "https://raw.githubusercontent.com/pret/pokered/master/gfx/{}.png"
+
+lines.append("")
+lines.append("// ─── 인트로용 풀바디 트레이너 스프라이트 ─────────────────")
+lines.append(f"static const int INTRO_SPR_W = {INTRO_OUT_W};")
+lines.append(f"static const int INTRO_SPR_H = {INTRO_OUT_H // 2};")
+lines.append("")
+lines.append(f"struct IntroSprite {{ const char* rows[{INTRO_OUT_H // 2}]; }};")
+lines.append("")
+
+for path, name, kor in INTRO_TARGETS:
+    print(f"인트로: {kor}({path})...", end=" ", flush=True)
+    img = fetch_image(INTRO_BASE.format(path))
+    if img is None:
+        print("실패")
+        rows = make_empty_sprite()
+    else:
+        rows = convert_intro_sprite(img)
+        print(f"완료 ({INTRO_OUT_W}×{INTRO_OUT_H//2}half)")
+    lines.append(f"// {kor}")
+    lines.append(f"static const IntroSprite SPR_INTRO_{name} = {{{{")
+    for row in rows:
+        lines.append(f'    "{escape_c(row)}",')
+    lines.append("}};")
+    lines.append("")
+
+# ─── 오버월드 플레이어 스프라이트 (16×16 GB → 8 chars × 4 rows) ─────────
+# 우리 타일이 8×8 px → 4 chars × 2 rows 이므로
+# 16×16 px 플레이어 = 8 chars × 4 rows = 2×2 우리 타일 (GB와 동일 비율).
+# 흰색 픽셀은 "투명" 마커(\x1F) → 맵 타일이 아래로 비침.
+
+OW_BASE = "https://raw.githubusercontent.com/pret/pokered/master/gfx/sprites/{}.png"
+
+OW_PAL = {
+    "fg_dark":  "38;5;232",   # 검정 외곽선
+    "fg_red":   "38;5;196",   # 빨간 모자
+    "fg_blue":  "38;5;33",    # 파란 옷
+    "fg_skin":  "38;5;215",   # 살구 피부
+}
+
+# GB 4단계 → 캐릭터 클래스. spriters-resource 시트 색:
+#   (20,20,20)   = 검정 외곽선
+#   (153,153,153)= 중간 회색 (머리/바지)
+#   (232,232,232)= 밝은 회색 (모자/옷/피부 highlight) — 투명 아님!
+#   (248,248,248)= 진짜 흰색 (셀 사이 separator) → 투명
+def ow_classify(v):
+    if v > 240: return 0   # 진짜 흰색 (240↑)만 투명. 232 light-gray는 솔리드.
+    if v > 180: return 1   # lgray ~232
+    if v > 80:  return 2   # dgray ~153
+    return 3               # 검정 ~20
+
+def ow_color(cls):
+    if cls == 1: return "38;5;250"   # 밝은 회색
+    if cls == 2: return "38;5;244"   # 중간 회색
+    return "38;5;232"                # 외곽선
+
+def ow_bg(cls):
+    if cls == 1: return "48;5;250"
+    if cls == 2: return "48;5;244"
+    return "48;5;232"
+
+def ow_cell(top, bot):
+    """반각 셀 1개 렌더. 둘 다 투명이면 \\x1F (skip 마커)."""
+    if top == 0 and bot == 0:
+        return "\x1f"  # 완전 투명 → 맵 타일 보이게
+    if top == 0:
+        return f"\033[{ow_color(bot)}m▄\033[0m"  # 아래만 (▄)
+    if bot == 0:
+        return f"\033[{ow_color(top)}m▀\033[0m"  # 위만 (▀)
+    if top == bot:
+        return f"\033[{ow_bg(top)}m \033[0m"
+    return f"\033[{ow_color(top)};{ow_bg(bot)}m▀\033[0m"
+
+def convert_ow_player_frame(img, frame_idx):
+    """16×16 src 한 프레임 → 16 chars × 8 rows (1:1 픽셀 매핑, 손실 없음)."""
+    base_y = frame_idx * 16
+    rows = []
+    for hy in range(8):
+        py_top = base_y + hy * 2
+        py_bot = py_top + 1
+        row = ""
+        for x in range(16):
+            t = img.getpixel((x, py_top))
+            b = img.getpixel((x, py_bot))
+            row += ow_cell(ow_classify(t), ow_classify(b))
+        rows.append(row)
+    return rows
+
+def fetch_ow_image(name):
+    try:
+        with urllib.request.urlopen(OW_BASE.format(name), timeout=10) as r:
+            return Image.open(io.BytesIO(r.read())).convert("L")
+    except Exception as e:
+        print(f"  오류: {e}", file=sys.stderr)
+        return None
+
+# spriters-resource 시트(8728.png)에서 Red 6프레임 추출.
+# 시트 grid: 첫 셀 (10,34), pitch (17,17), 셀 16×16.
+SHEET_PATH = "/mnt/c/Users/김지훈/Desktop/8728.png"
+def load_red_from_sheet():
+    try:
+        sheet = Image.open(SHEET_PATH).convert("RGBA")
+    except Exception as e:
+        print(f"  시트 로드 실패: {e}", file=sys.stderr)
+        return None
+    # 추출 셀 인덱스 (row 0, col=N), 6프레임 매핑:
+    # 출력 frame_idx → sheet col:
+    #   0 = down idle   (col 1)
+    #   1 = up   idle   (col 4)
+    #   2 = side idle   (col 6)
+    #   3 = down walk   (col 0)
+    #   4 = up   walk   (col 3)
+    #   5 = side walk   (col 7)
+    # 8 프레임: down/up/left/right 각각 idle/walk
+    # 0=down idle, 1=up idle, 2=left idle, 3=right idle,
+    # 4=down walk, 5=up walk, 6=left walk, 7=right walk
+    SHEET_COLS = [1, 4, 6, 8, 0, 3, 7, 9]
+    # 16x16 8 프레임을 16×128 단일 이미지로 합쳐 반환.
+    # 시트 사용 마커(orange 255,127,39)와 mid gray(153)가 grayscale에서 거의 같음 →
+    # RGBA 원본에서 먼저 orange→white 변환 후 grayscale로 변환
+    out = Image.new("L", (16, 16 * len(SHEET_COLS)), 248)
+    for fi, col in enumerate(SHEET_COLS):
+        x0 = 10 + col * 17
+        y0 = 34
+        cell_rgba = sheet.crop((x0, y0, x0 + 16, y0 + 16)).convert("RGBA")
+        px = cell_rgba.load()
+        for cy in range(16):
+            for cx in range(16):
+                r, g, b, a = px[cx, cy]
+                # orange used-marker (255,127,39) → white (투명)
+                if (r, g, b) == (255, 127, 39):
+                    px[cx, cy] = (248, 248, 248, 255)
+        cell_l = cell_rgba.convert("L")
+        out.paste(cell_l, (0, fi * 16))
+    return out
+
+print("\n오버월드 플레이어 스프라이트...")
+img = load_red_from_sheet()
+if img is None:
+    img = fetch_ow_image("red")  # fallback
+if img is not None:
+    n_frames = img.size[1] // 16
+    print(f"  Red 시트 추출: {img.size} → {n_frames} frames")
+    lines.append("")
+    lines.append("// ─── 오버월드 플레이어 스프라이트 (8 chars × 4 rows, 6 프레임) ─────")
+    lines.append("// red.png 16×96 (16x16 6프레임). 흰색 → \\x1F (투명, 맵 비침).")
+    lines.append(f"static const int OW_PLAYER_W = 16;")
+    lines.append(f"static const int OW_PLAYER_H = 8;")
+    lines.append(f"static const int OW_PLAYER_FRAMES = {n_frames};")
+    lines.append("")
+    lines.append("// 프레임 인덱스: 0=down idle, 1=down walk, 2=up idle, 3=up walk, 4=side, 5=side walk")
+    lines.append("// (실제 layout은 pokered red.png에 의존 — 위치가 안 맞으면 overworld.cpp에서 매핑 변경)")
+    lines.append("struct OwPlayerFrame { const char* rows[8]; };")
+    lines.append("")
+    lines.append(f"static const OwPlayerFrame OW_PLAYER_RED[{n_frames}] = {{")
+    for fi in range(n_frames):
+        rows = convert_ow_player_frame(img, fi)
+        lines.append(f"    {{{{   // frame {fi}")
+        for r in rows:
+            lines.append(f'        "{escape_c(r)}",')
+        lines.append("    }},")
+    lines.append("};")
+    lines.append("")
+else:
+    print("  red.png 다운로드 실패")
+
 output = "\n".join(lines) + "\n"
 out_path = "../src/data/sprites.h"
 with open(out_path, "w", encoding="utf-8") as f:

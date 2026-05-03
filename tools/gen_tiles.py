@@ -59,10 +59,9 @@ def get_tile(img, idx):
     return img.crop((col*TILE_W, row*TILE_H, (col+1)*TILE_W, (row+1)*TILE_H))
 
 def tile_to_ansi(tile, palette_key):
-    """8×8 픽셀 타일 → 2char×2행 ANSI 문자열
-    각 행 = 4픽셀 높이 (half-block으로 상하 2픽셀 표현)
-    각 칸 = 4픽셀 너비 (공백 2개로 표현)
-    출력: 2줄 (위 4px 행, 아래 4px 행), 각 줄 2칸 너비 = 4chars"""
+    """8×8 픽셀 타일 → 8char×4행 ANSI (1:1 픽셀 매핑, 디테일 보존)
+    각 셀 = 1 src 픽셀, 각 행 = 2 src 픽셀(half-block 상/하).
+    출력: 4행, 각 행 8 chars 너비"""
     pal = PALETTES[palette_key]
     rows = []
 
@@ -72,30 +71,19 @@ def tile_to_ansi(tile, palette_key):
         if v > 60:  return 2
         return 3
 
-    for hy in range(2):       # 2행 (각 행 = 4픽셀 높이)
-        py_top = hy * 4       # 상단 2픽셀 (py_top, py_top+1)
-        py_bot = hy * 4 + 2   # 하단 2픽셀 (py_top+2, py_top+3)
+    for hy in range(4):       # 4 출력 행 (각 행 = 2 src 픽셀)
+        py_top = hy * 2
+        py_bot = hy * 2 + 1
         row = ""
-        for hx in range(2):   # 2칸 (각 칸 = 4픽셀 너비)
-            px_s = hx * 4
-            # 상단 2×4 블록 평균
-            top_vals = [tile.getpixel((px_s + dx, py_top + dy))
-                       for dx in range(4) for dy in range(2)]
-            top_avg = sum(top_vals) // len(top_vals)
-            # 하단 2×4 블록 평균
-            bot_vals = [tile.getpixel((px_s + dx, py_bot + dy))
-                       for dx in range(4) for dy in range(2)]
-            bot_avg = sum(bot_vals) // len(bot_vals)
-
-            tc = classify(top_avg)
-            bc = classify(bot_avg)
-
+        for x in range(8):    # 8 셀 (각 셀 = 1 src 픽셀)
+            tc = classify(tile.getpixel((x, py_top)))
+            bc = classify(tile.getpixel((x, py_bot)))
             if tc == bc:
-                row += f"\x1b[{pal[tc]}m  \x1b[0m"
+                row += f"\x1b[{pal[tc]}m \x1b[0m"
             else:
                 bg_code = pal[tc]
                 fg_code = pal[bc].replace("48;5;", "38;5;")
-                row += f"\x1b[{bg_code};{fg_code}m\xe2\x96\x84\xe2\x96\x84\x1b[0m"
+                row += f"\x1b[{bg_code};{fg_code}m▄\x1b[0m"
         rows.append(row)
     return rows
 
@@ -103,8 +91,8 @@ def make_flat_tile(palette_key, shade=0):
     """단색 타일 (스프라이트 없을 때 fallback)"""
     pal = PALETTES[palette_key]
     rows = []
-    for _ in range(2):
-        rows.append(f"\x1b[{pal[shade]}m    \x1b[0m")  # 4chars
+    for _ in range(4):
+        rows.append(f"\x1b[{pal[shade]}m        \x1b[0m")  # 8chars
     return rows
 
 def escape_c(s):
@@ -160,12 +148,12 @@ lines.append("// 포켓몬 레드 실제 타일셋 스프라이트 기반")
 lines.append("#pragma once")
 lines.append("#include <cstring>")
 lines.append("")
-lines.append("// 각 타일: 2글자 너비 × 2행 (half-block ANSI, 각 행=4픽셀)")
-lines.append("static const int TILE_COLS = 2;  // 터미널 칸 수 (가로, 각 칸=2chars)")
-lines.append("static const int TILE_ROWS = 2;  // 터미널 행 수 (세로)")
+lines.append("// 각 타일: 8글자 너비 × 4행 (1:1 픽셀 매핑, 8x8 src 손실 없이 보존)")
+lines.append("static const int TILE_COLS = 8;   // 터미널 칸 수 (가로)")
+lines.append("static const int TILE_ROWS = 4;   // 터미널 행 수 (세로)")
 lines.append("")
 lines.append("struct TileArt {")
-lines.append("    const char* rows[2];  // ANSI UTF-8 문자열 (각 4chars 너비)")
+lines.append("    const char* rows[4];  // ANSI UTF-8 문자열 (각 8chars 너비)")
 lines.append("    char mapChar;")
 lines.append("};")
 lines.append("")

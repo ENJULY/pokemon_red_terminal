@@ -46,10 +46,9 @@ private:
     void renderKorean();
 
     // ─── 인트로 ───
-    // 0~4: 나레이션, 5: 레드 이름 확인, 6~8: 라이벌 소개, 9~10: 마무리 → OVERWORLD
-    static const int INTRO_COUNT = 11;
+    // 0~4: 나레이션, 5: 레드 이름 확인, 6~8: 라이벌 소개, 9~11: 마무리 → OVERWORLD
+    static const int INTRO_COUNT = 12;
     static const wchar_t* INTRO_LINES[INTRO_COUNT];
-    static const char* OAK_SPRITE[12];
     int  introStep_     = 0;
 
     void updateIntro(Key key);

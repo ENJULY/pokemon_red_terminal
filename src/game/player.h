@@ -49,6 +49,9 @@ struct Player {
     // 포켓몬센터 치료 여부 (상록시티 등)
     bool viridianHealed;
     bool pewterHealed;
+
+    // 인트로 직후 침실에서 깨어나는 시퀀스 트리거
+    bool justWokeUp;
 };
 
 // ─── 포켓몬 생성 ─────────────────────────────────────────────
