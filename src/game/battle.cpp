@@ -37,10 +37,11 @@ void Battle::startWild(int speciesId, int level) {
     state_.enemyParty[0] = state_.enemy;
     state_.enemyPartyIdx = 0;
     state_.playerPartyIdx = firstAlive(pl_);
-    state_.phase = BattlePhase::SHOW_MSG;
+    state_.phase = BattlePhase::INTRO_TRANSITION;  // 화면 효과 → SHOW_MSG
+    state_.transitionFrame = 18;
     state_.result = BattleResult::NONE;
     state_.cursor = 0;
-    state_.awaitKey = true;
+    state_.awaitKey = false;  // transition 중엔 입력 차단
     state_.frame = 0;
     swprintf(state_.msg, 128, L"야생 %ls이(가) 나타났다!", state_.enemy.species->name);
     state_.msgWait = 0;
@@ -58,10 +59,11 @@ void Battle::startTrainer(const wchar_t* name, const wchar_t* preText,
     state_.enemyPartyIdx = 0;
     state_.enemy = state_.enemyParty[0];
     state_.playerPartyIdx = firstAlive(pl_);
-    state_.phase = BattlePhase::SHOW_MSG;
+    state_.phase = BattlePhase::INTRO_TRANSITION;
+    state_.transitionFrame = 18;
     state_.result = BattleResult::NONE;
     state_.cursor = 0;
-    state_.awaitKey = true;
+    state_.awaitKey = false;
     state_.frame = 0;
     swprintf(state_.msg, 128, L"%ls이(가) 승부를 걸어왔다!", name);
     state_.msgWait = 0;
@@ -270,10 +272,21 @@ void Battle::executeEnemyMove() {
 // ─── 업데이트 ────────────────────────────────────────────────
 void Battle::update(Key key) {
     state_.frame++;
+    BattlePhase prevPhase = state_.phase;  // phase 변경 감지 (한글 잔상 정리용)
     Pokemon& myPoke = pl_.party[state_.playerPartyIdx];
     Pokemon& en     = state_.enemy;
 
     switch (state_.phase) {
+
+    case BattlePhase::INTRO_TRANSITION: {
+        // 검정/흰 깜빡임 카운트다운. 0이 되면 SHOW_MSG로.
+        state_.transitionFrame--;
+        if (state_.transitionFrame <= 0) {
+            state_.phase = BattlePhase::SHOW_MSG;
+            state_.awaitKey = true;
+        }
+        break;
+    }
 
     case BattlePhase::CHOOSE_ACTION: {
         // 2×2 그리드: 0=싸운다 1=가방 2=포켓몬 3=도망
@@ -357,6 +370,8 @@ void Battle::update(Key key) {
                 int mySpe = applyStage(myPoke.spe, myPoke.speStage);
                 int enSpe = applyStage(en.spe, en.speStage);
                 state_.playerFirst = (mySpe >= enSpe);
+                state_.enemyWentFirst = false;  // 새 턴 시작 — flag reset
+                state_.turnStarted = true;       // 행동 결정 — SHOW_MSG가 인사 X
                 state_.phase = BattlePhase::EXECUTE_PLAYER;
                 if (!state_.playerFirst)
                     state_.phase = BattlePhase::EXECUTE_ENEMY;
@@ -455,22 +470,32 @@ void Battle::update(Key key) {
                 state_.awaitKey = true;
                 break;
             }
-            // 교체 후 적 선공
+            // 인사 메시지 ("승부를 걸어왔다", "야생 X 나타났다") — turnStarted false면 CHOOSE_ACTION으로
+            if (!state_.turnStarted) {
+                state_.trainerIntroShown = true;  // 트레이너 풀바디 인트로 1회 본 거 표시
+                state_.phase = BattlePhase::CHOOSE_ACTION;
+                state_.cursor = 0;
+                break;
+            }
+            // 적 선공 시: EXECUTE_ENEMY → SHOW_MSG → EXECUTE_PLAYER → SHOW_MSG → CHOOSE_ACTION
+            // 플레이어 선공 시: EXECUTE_PLAYER → SHOW_MSG → EXECUTE_ENEMY → SHOW_MSG → CHOOSE_ACTION
             if (!state_.playerFirst) {
                 if (!state_.enemyWentFirst) {
-                    // 적 행동 차례
-                    state_.phase = BattlePhase::EXECUTE_ENEMY;
+                    // 적이 처음 행동 마침 → 이제 플레이어 차례 (이전: 적 또 행동 = 2번 버그)
+                    state_.phase = BattlePhase::EXECUTE_PLAYER;
                     state_.enemyWentFirst = true;
                 } else {
-                    // 적 행동 완료 → 다음 턴
+                    // 적+플레이어 다 끝 → 다음 턴
                     state_.enemyWentFirst = false;
+                    state_.turnStarted = false;  // 턴 끝 — 다음 SHOW_MSG는 인사 또는 turn 시작 전
                     state_.phase = BattlePhase::CHOOSE_ACTION;
                     state_.cursor = 0;
                 }
             } else {
-                // 플레이어 선공 → 이제 적 행동
+                // 플레이어 선공 → 적 행동 한 번 → 다음 SHOW_MSG에서 CHOOSE_ACTION
                 state_.phase = BattlePhase::EXECUTE_ENEMY;
                 state_.playerFirst = false;
+                state_.enemyWentFirst = true;  // 적이 이번 턴 행동했음 → 다음 SHOW_MSG에서 else 분기
             }
         }
         break;
@@ -572,6 +597,7 @@ void Battle::update(Key key) {
 
     default: break;
     }
+    (void)prevPhase;  // printW가 이제 buffer 사용 → phase 변경 redrawAll 불필요
 }
 
 // ─── 스프라이트 그리기 ────────────────────────────────────────
@@ -579,27 +605,56 @@ void Battle::drawSprite(int x, int y, int speciesId, bool back) {
     const SpriteData* spr = back ? getSpriteBack(speciesId) : getSpriteFront(speciesId);
     if (!spr && back) spr = getSpriteFront(speciesId);  // 뒷모습 없으면 앞모습으로 대체
     if (!spr) return;
-    for (int r = 0; r < SPR_H; r++) {
+    // sprite마다 actual height (front=20, back=16). nullptr 패딩 만나면 중단.
+    for (int r = 0; r < spr->height; r++) {
         if (!spr->rows[r]) break;
         ren_.printRaw(x, y + r, spr->rows[r]);
     }
 }
 
-// ─── HP 바 그리기 ────────────────────────────────────────────
+// ─── HP 바 그리기 (pokered 유사: HP: 라벨 + 색 채운 막대) ────
+// 멀티바이트 UTF-8 (█/░ = 3 byte)를 setCellU로 1 cell씩 저장.
+// ren_.print는 byte 단위라 멀티바이트는 ???로 깨짐.
 void Battle::drawHPBar(int x, int y, int cur, int maxHP, const std::string& col) {
-    int total = 14;
+    int total = 16;
     int filled = (cur > 0) ? (cur * total / maxHP) : 0;
-    std::string bar(filled, '|');
-    bar += std::string(total - filled, '-');
-    ren_.print(x, y, "[" + bar + "]", col);
+    if (cur > 0 && filled == 0) filled = 1;  // 1 이상이면 최소 1칸
+    // "HP:" 라벨 — ASCII이라 print OK
+    static const std::string BG_PAPER_LOCAL = "\033[48;5;253m";
+    ren_.print(x, y, "HP:", BG_PAPER_LOCAL + Color::BLACK);
+    // 막대 — █(채움) / ░(빈칸) 멀티바이트
+    static const std::string BLOCK_FULL  = "\xe2\x96\x88";  // █
+    static const std::string BLOCK_EMPTY = "\xe2\x96\x91";  // ░
+    std::string emptyCol = BG_PAPER_LOCAL + Color::BRIGHT_BLACK;
+    for (int i = 0; i < total; i++) {
+        if (i < filled) ren_.setCellU(x + 4 + i, y, BLOCK_FULL,  col);
+        else            ren_.setCellU(x + 4 + i, y, BLOCK_EMPTY, emptyCol);
+    }
 }
 
 // ─── 렌더 ────────────────────────────────────────────────────
+// pokered GB 화면 분위기: 회색 배경 + 흰 박스 (HUD, 메시지)
+static const std::string BG_GRAY  = "\033[48;5;244m";  // 회색 배경 (sprite 영역)
+static const std::string BG_PAPER = "\033[48;5;253m";  // 흰 종이 (박스 안)
+static const std::string FG_DARK  = "\033[38;5;232m";  // 검정 글자
+
 void Battle::render() {
     int W = ren_.width;
     int H = ren_.height;
 
-    ren_.fillRect(0, 0, W, H, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
+    // ── INTRO_TRANSITION: 검정 → 흰 → 검정 깜빡임 ─────────────
+    if (state_.phase == BattlePhase::INTRO_TRANSITION) {
+        int f = state_.transitionFrame;
+        std::string col;
+        if (f > 12)      col = std::string(Color::BG_BLACK) + Color::BLACK;
+        else if (f > 6)  col = std::string(Color::BG_WHITE) + Color::WHITE;
+        else             col = std::string(Color::BG_BLACK) + Color::BLACK;
+        ren_.fillRect(0, 0, W, H, ' ', col);
+        return;
+    }
+
+    // 배경: 회색 (sprite의 흰 외곽선이 도드라지게)
+    ren_.fillRect(0, 0, W, H, ' ', BG_GRAY + Color::BLACK);
 
     Pokemon& myPoke = pl_.party[state_.playerPartyIdx];
     Pokemon& en     = state_.enemy;
@@ -623,51 +678,51 @@ void Battle::render() {
         return;
     }
 
-    // ── 통상 배틀 화면 ────────────────────────────────────────
-    int mid = H / 2;
-    ren_.print(0, mid, std::string(W, '-'), std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+    // ── 통상 배틀 화면 (pokered layout) ──────────────────────
+    //   Enemy HUD: 좌상단    Enemy sprite: 우상단
+    //   Player sprite: 좌하단   Player HUD: 우하단
+    //   Message box: 하단 전폭
+    int boxH = 6;
+    int msgY = H - boxH - 1;
 
-    // 적 포켓몬 정보 (우측 상단)
-    int enInfoX = W - 32;
+    // ── Enemy HUD 박스 (좌상단) ────────────────────────────────
+    int enInfoX = 2;
     int enInfoY = 1;
+    int enBoxW = 30;
+    int enBoxH = 5;
+    ren_.drawBox(enInfoX - 1, enInfoY - 1, enBoxW, enBoxH, BG_PAPER + FG_DARK);
+    ren_.fillRect(enInfoX, enInfoY, enBoxW - 2, enBoxH - 2, ' ', BG_PAPER + FG_DARK);
     int enHpPct = en.currentHP * 100 / (en.maxHP > 0 ? en.maxHP : 1);
-    std::string enHpCol = std::string(Color::BG_BLACK) +
-        ((enHpPct > 50) ? Color::BRIGHT_GREEN :
-         (enHpPct > 20) ? Color::BRIGHT_YELLOW : Color::BRIGHT_RED);
+    std::string enHpCol = BG_PAPER +
+        ((enHpPct > 50) ? Color::GREEN :
+         (enHpPct > 20) ? Color::YELLOW : Color::RED);
     drawHPBar(enInfoX, enInfoY + 2, en.currentHP, en.maxHP, enHpCol);
 
-    // 내 포켓몬 정보 (좌측 중간)
-    int myInfoX = 4;
-    int myInfoY = mid + 1;
+    // ── Player HUD 박스 (우하단, msg box 위) ─────────────────
+    int myInfoX = W - 32;
+    int myInfoY = msgY - 5;
+    int myBoxW = 30;
+    int myBoxH = 5;
+    ren_.drawBox(myInfoX - 1, myInfoY - 1, myBoxW, myBoxH, BG_PAPER + FG_DARK);
+    ren_.fillRect(myInfoX, myInfoY, myBoxW - 2, myBoxH - 2, ' ', BG_PAPER + FG_DARK);
     int myHpPct = myPoke.currentHP * 100 / (myPoke.maxHP > 0 ? myPoke.maxHP : 1);
-    std::string myHpCol = std::string(Color::BG_BLACK) +
-        ((myHpPct > 50) ? Color::BRIGHT_GREEN :
-         (myHpPct > 20) ? Color::BRIGHT_YELLOW : Color::BRIGHT_RED);
+    std::string myHpCol = BG_PAPER +
+        ((myHpPct > 50) ? Color::GREEN :
+         (myHpPct > 20) ? Color::YELLOW : Color::RED);
     drawHPBar(myInfoX, myInfoY + 2, myPoke.currentHP, myPoke.maxHP, myHpCol);
 
-    // 대화창 박스 (하단)
-    int boxH = 6;
-    int boxY = H - boxH - 1;
+    // 대화창 박스 (하단) — 흰 종이 + 검정 테두리
+    int boxY = msgY;
     int boxW = W - 4;
     int boxX = 2;
-    ren_.drawBox(boxX, boxY, boxW, boxH, std::string(Color::BG_BLACK) + Color::WHITE);
-    ren_.fillRect(boxX+1, boxY+1, boxW-2, boxH-2, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
+    ren_.drawBox(boxX, boxY, boxW, boxH, BG_PAPER + FG_DARK);
+    ren_.fillRect(boxX+1, boxY+1, boxW-2, boxH-2, ' ', BG_PAPER + FG_DARK);
 
-    // 커맨드 메뉴 (CHOOSE_ACTION) - 2×2 그리드
+    // 커맨드 메뉴 (CHOOSE_ACTION) — 우측 절반에 작은 박스
     if (state_.phase == BattlePhase::CHOOSE_ACTION) {
-        // 오른쪽 절반에 커맨드 박스
         int cmdX = boxX + boxW / 2;
-        ren_.drawBox(cmdX, boxY, boxW/2, boxH, std::string(Color::BG_BLACK) + Color::WHITE);
-        ren_.fillRect(cmdX+1, boxY+1, boxW/2-2, boxH-2, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
-        const char* cmds[4] = {"FIGHT", "BAG", "POKEMON", "RUN"};
-        for (int i = 0; i < 4; i++) {
-            int cx = cmdX + 2 + (i % 2) * 10;
-            int cy = boxY + 2 + (i / 2);
-            std::string cc = std::string(Color::BG_BLACK) +
-                (state_.cursor == i ? Color::BRIGHT_WHITE : Color::WHITE);
-            if (state_.cursor == i) ren_.print(cx - 2, cy, ">", cc);
-            ren_.print(cx, cy, cmds[i], cc);
-        }
+        ren_.drawBox(cmdX, boxY, boxW/2, boxH, BG_PAPER + FG_DARK);
+        ren_.fillRect(cmdX+1, boxY+1, boxW/2-2, boxH-2, ' ', BG_PAPER + FG_DARK);
     }
 
     // 기술 선택 메뉴 (CHOOSE_MOVE)
@@ -691,6 +746,9 @@ void Battle::renderKorean() {
     int W = ren_.width;
     int H = ren_.height;
     int mid = H / 2;
+
+    // INTRO_TRANSITION 중엔 sprite/HUD/텍스트 출력 안 함 (검정/흰 화면만)
+    if (state_.phase == BattlePhase::INTRO_TRANSITION) return;
 
     Pokemon& myPoke = pl_.party[state_.playerPartyIdx];
     Pokemon& en     = state_.enemy;
@@ -722,41 +780,65 @@ void Battle::renderKorean() {
 
     wchar_t buf[64];
 
-    // ── 스프라이트 출력 (flush 후 호출) ─────────────────────────
-    // 적 스프라이트 (우측 상단)
-    int enSprX = W / 2 + 2;
-    int enSprY = 1;
-    drawSprite(enSprX, enSprY, en.species->id, false);
-
-    // 내 포켓몬 스프라이트 (좌측 중간)
-    int mySprX = 4;
-    int mySprY = mid - SPR_H + 1;
-    drawSprite(mySprX, mySprY, myPoke.species->id, true);
-
-    // ── 적 포켓몬 이름/레벨 ──────────────────────────────────
-    int enInfoX = W - 32;
-    int enInfoY = 1;
-    swprintf(buf, 64, L"상대 %ls  Lv.%d", en.species->name, en.level);
-    ren_.printW(enInfoX, enInfoY, buf,
-        std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
-    swprintf(buf, 64, L"HP: %d / %d", en.currentHP, en.maxHP);
-    ren_.printW(enInfoX, enInfoY + 1, buf,
-        std::string(Color::BG_BLACK) + Color::WHITE);
-
-    // ── 내 포켓몬 이름/레벨 ──────────────────────────────────
-    int myInfoX = W / 2 + 2;
-    int myInfoY = mid + 1;
-    swprintf(buf, 64, L"%ls  Lv.%d", myPoke.species->name, myPoke.level);
-    ren_.printW(myInfoX, myInfoY, buf,
-        std::string(Color::BG_BLACK) + Color::BRIGHT_CYAN);
-    swprintf(buf, 64, L"HP: %d / %d", myPoke.currentHP, myPoke.maxHP);
-    ren_.printW(myInfoX, myInfoY + 1, buf,
-        std::string(Color::BG_BLACK) + Color::CYAN);
-
-    // ── 대화창 메시지 ─────────────────────────────────────────
+    // pokered layout: enemy 좌상단 HUD + 우상단 sprite, player 좌하단 sprite + 우하단 HUD
     int boxH = 6;
     int boxY = H - boxH - 1;
     int boxX = 2;
+
+    // ── 트레이너 인트로 판정 ───────────────────────────────────
+    // 첫 SHOW_MSG (turnStarted=false, !trainerIntroShown)에만 풀바디 표시.
+    // 이후 게임 진행 중 SHOW_MSG에선 적 포켓몬 sprite로 교체.
+    bool trainerIntro =
+        (state_.type == BattleType::TRAINER || state_.type == BattleType::BOSS) &&
+        !state_.trainerIntroShown &&
+        !state_.turnStarted &&
+        state_.phase == BattlePhase::SHOW_MSG;
+
+    // ── Enemy sprite (우상단) ──────────────────────────────────
+    const SpriteData* enSpr = getSpriteFront(en.species->id);
+    int enW = enSpr ? enSpr->width  : 40;
+    int enH = enSpr ? enSpr->height : 20;
+    int enSprX = W - enW - 2;
+    int enSprY = 1;
+    if (trainerIntro && state_.trainerName) {
+        const IntroSprite* trSpr = &SPR_INTRO_OAK;
+        if (wcscmp(state_.trainerName, pl_.rivalName) == 0)
+            trSpr = &SPR_INTRO_RIVAL;
+        int spX = W - INTRO_SPR_W - 2;
+        if (spX < 0) spX = 0;
+        for (int i = 0; i < INTRO_SPR_H && enSprY + i < boxY - 1; i++) {
+            if (trSpr->rows[i])
+                ren_.printRaw(spX, enSprY + i, trSpr->rows[i]);
+        }
+    } else {
+        drawSprite(enSprX, enSprY, en.species->id, false);
+    }
+
+    // ── Player sprite (좌하단, msg box 위) ────────────────────
+    const SpriteData* mySpr = getSpriteBack(myPoke.species->id);
+    if (!mySpr) mySpr = getSpriteFront(myPoke.species->id);
+    int myW = mySpr ? mySpr->width  : 32;
+    int myH = mySpr ? mySpr->height : 16;
+    int mySprX = 2;
+    int mySprY = boxY - myH - 1;
+    if (mySprY < enSprY + enH + 1) mySprY = enSprY + enH + 1;  // 적 sprite 겹침 방지
+    drawSprite(mySprX, mySprY, myPoke.species->id, true);
+
+    // ── Enemy HUD (좌상단, 흰 박스 안) — 이름/Lv/HP ───────────
+    int enInfoX = 2;
+    int enInfoY = 1;
+    swprintf(buf, 64, L"상대 %ls  Lv.%d", en.species->name, en.level);
+    ren_.printW(enInfoX, enInfoY, buf, BG_PAPER + Color::BLACK);
+    swprintf(buf, 64, L"HP: %d / %d", en.currentHP, en.maxHP);
+    ren_.printW(enInfoX, enInfoY + 1, buf, BG_PAPER + Color::BLACK);
+
+    // ── Player HUD (우하단, 흰 박스 안) — 이름/Lv/HP ──────────
+    int myInfoX = W - 32;
+    int myInfoY = boxY - 5;
+    swprintf(buf, 64, L"%ls  Lv.%d", myPoke.species->name, myPoke.level);
+    ren_.printW(myInfoX, myInfoY, buf, BG_PAPER + Color::BLUE);
+    swprintf(buf, 64, L"HP: %d / %d", myPoke.currentHP, myPoke.maxHP);
+    ren_.printW(myInfoX, myInfoY + 1, buf, BG_PAPER + Color::BLACK);
 
     if (state_.phase == BattlePhase::SHOW_MSG ||
         state_.phase == BattlePhase::FAINT_ENEMY ||
@@ -764,34 +846,42 @@ void Battle::renderKorean() {
         state_.phase == BattlePhase::LEVEL_UP_MSG ||
         state_.phase == BattlePhase::VICTORY ||
         state_.phase == BattlePhase::DEFEAT) {
-        ren_.printW(boxX + 2, boxY + 2, state_.msg,
-            std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
+        ren_.printW(boxX + 2, boxY + 2, state_.msg, BG_PAPER + Color::BLACK);
         if (state_.msg2[0])
-            ren_.printW(boxX + 2, boxY + 3, state_.msg2,
-                std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW);
+            ren_.printW(boxX + 2, boxY + 3, state_.msg2, BG_PAPER + Color::RED);
         if (state_.awaitKey)
             ren_.printW(boxX + 2, boxY + boxH - 2, L"[ Z / Enter: 계속 ]",
-                std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+                BG_PAPER + Color::BRIGHT_BLACK);
     }
 
     // ── 기술 이름 (CHOOSE_MOVE) ───────────────────────────────
     if (state_.phase == BattlePhase::CHOOSE_MOVE) {
         ren_.printW(boxX + 2, boxY + 1, L"기술 선택:",
-            std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW);
+            BG_PAPER + Color::BLACK);
         for (int i = 0; i < myPoke.numMoves; i++) {
             int cx = boxX + 2 + (i % 2) * 16;
             int cy = boxY + 2 + (i / 2);
             const MoveData& mv = getMoveData(myPoke.moves[i].moveId);
-            std::string cc = std::string(Color::BG_BLACK) +
-                (state_.cursor == i ? Color::BRIGHT_YELLOW : Color::WHITE);
+            std::string cc = BG_PAPER +
+                (state_.cursor == i ? Color::RED : Color::BLACK);
             ren_.printW(cx, cy, mv.name, cc);
         }
     }
 
-    // ── 커맨드 헤더 (CHOOSE_ACTION) ───────────────────────────
+    // ── 커맨드 헤더 + 4개 한국어 메뉴 (CHOOSE_ACTION) ─────────
     if (state_.phase == BattlePhase::CHOOSE_ACTION) {
         swprintf(buf, 64, L"%ls은(는) 어떻게 할까?", myPoke.species->name);
-        ren_.printW(boxX + 2, boxY + 1, buf,
-            std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
+        ren_.printW(boxX + 2, boxY + 1, buf, BG_PAPER + Color::BLACK);
+        int cmdX = boxX + (W - 4) / 2;
+        const wchar_t* cmds[4] = {L"싸운다", L"가방", L"포켓몬", L"도망"};
+        for (int i = 0; i < 4; i++) {
+            int cx = cmdX + 2 + (i % 2) * 10;
+            int cy = boxY + 2 + (i / 2);
+            std::string cc = BG_PAPER +
+                (state_.cursor == i ? Color::RED : Color::BLACK);
+            if (state_.cursor == i)
+                ren_.print(cx - 2, cy, ">", cc);
+            ren_.printW(cx, cy, cmds[i], cc);
+        }
     }
 }

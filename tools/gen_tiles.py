@@ -1,14 +1,15 @@
 """
-pokered 타일셋 → 터미널 ANSI 2char 타일 변환기
-포켓몬 레드 실제 스프라이트 타일 사용
+pokered 타일셋 → 터미널 ANSI 2char 타일 변환기 (로컬 파일 사용)
+입력: pokered_assets/gfx/tilesets/*.png
 출력: src/data/tiles.h
 
 각 8×8픽셀 타일 → 터미널 2char×4행(half-block) 표현
 """
-import urllib.request, io, sys
+import os, sys
 from PIL import Image
 
-TILESET_BASE = "https://raw.githubusercontent.com/pret/pokered/master/gfx/tilesets/{}.png"
+ROOT   = os.path.dirname(os.path.abspath(__file__))
+ASSETS = os.path.normpath(os.path.join(ROOT, "..", "pokered_assets"))
 
 TILE_W = 8
 TILE_H = 8
@@ -37,14 +38,18 @@ PALETTES = {
     'floor':    ("48;5;255", "48;5;252", "48;5;248", "48;5;244"),
     # 산/바위 (Rock): 회색
     'rock':     ("48;5;250", "48;5;244", "48;5;238", "48;5;236"),
+    # 문 (Door): 갈색 그라디언트
+    'door':     ("48;5;222", "48;5;179", "48;5;130", "48;5;94"),
 }
 
 def fetch_tileset(name):
-    url = TILESET_BASE.format(name)
+    path = os.path.join(ASSETS, "gfx", "tilesets", f"{name}.png")
+    if not os.path.exists(path):
+        print(f"  [없음] {path}", file=sys.stderr)
+        return None
     try:
-        with urllib.request.urlopen(url, timeout=10) as r:
-            img = Image.open(io.BytesIO(r.read())).convert('L')  # grayscale
-        print(f"  다운로드 완료: {name}.png ({img.size[0]}×{img.size[1]}px, {(img.size[0]//TILE_W)*(img.size[1]//TILE_H)}타일)")
+        img = Image.open(path).convert('L')
+        print(f"  로드: {name}.png ({img.size[0]}×{img.size[1]}px, {(img.size[0]//TILE_W)*(img.size[1]//TILE_H)}타일)")
         return img
     except Exception as e:
         print(f"  오류: {e}", file=sys.stderr)
@@ -59,10 +64,11 @@ def get_tile(img, idx):
     return img.crop((col*TILE_W, row*TILE_H, (col+1)*TILE_W, (row+1)*TILE_H))
 
 def tile_to_ansi(tile, palette_key):
-    """8×8 픽셀 타일 → 8char×4행 ANSI (1:1 픽셀 매핑, 디테일 보존)
-    각 셀 = 1 src 픽셀, 각 행 = 2 src 픽셀(half-block 상/하).
-    출력: 4행, 각 행 8 chars 너비"""
+    """8×8 px atomic tile → 16chars × 8rows ANSI (overworld.cpp 기대값과 정합).
+    8×8 px를 NEAREST로 16×16 px 확대 후 half-block(1행=2 src 픽셀) 변환.
+    출력: 8행, 각 행 16 chars 너비"""
     pal = PALETTES[palette_key]
+    big = tile.resize((16, 16), Image.NEAREST)
     rows = []
 
     def classify(v):
@@ -71,13 +77,13 @@ def tile_to_ansi(tile, palette_key):
         if v > 60:  return 2
         return 3
 
-    for hy in range(4):       # 4 출력 행 (각 행 = 2 src 픽셀)
+    for hy in range(8):
         py_top = hy * 2
         py_bot = hy * 2 + 1
         row = ""
-        for x in range(8):    # 8 셀 (각 셀 = 1 src 픽셀)
-            tc = classify(tile.getpixel((x, py_top)))
-            bc = classify(tile.getpixel((x, py_bot)))
+        for x in range(16):
+            tc = classify(big.getpixel((x, py_top)))
+            bc = classify(big.getpixel((x, py_bot)))
             if tc == bc:
                 row += f"\x1b[{pal[tc]}m \x1b[0m"
             else:
@@ -88,11 +94,11 @@ def tile_to_ansi(tile, palette_key):
     return rows
 
 def make_flat_tile(palette_key, shade=0):
-    """단색 타일 (스프라이트 없을 때 fallback)"""
+    """단색 타일 fallback. 16 chars × 8 rows."""
     pal = PALETTES[palette_key]
     rows = []
-    for _ in range(4):
-        rows.append(f"\x1b[{pal[shade]}m        \x1b[0m")  # 8chars
+    for _ in range(8):
+        rows.append(f"\x1b[{pal[shade]}m                \x1b[0m")  # 16chars
     return rows
 
 def escape_c(s):
@@ -117,19 +123,20 @@ def escape_c(s):
 TILE_DEFS = [
     # (char, tileset, tile_idx, palette, fallback_palette, comment)
     (' ',  'overworld',  0,   'grass',    'grass',    '빈 땅 (기본 잔디)'),
-    ('.',  'overworld',  16,  'path',     'path',     '길 ($10)'),
-    (',',  'overworld',  3,   'grass',    'grass',    '짧은 풀 ($03)'),
-    (';',  'overworld',  82,  'tallgrass','tallgrass', '긴 풀 ($52, 야생 인카운터)'),
-    ('#',  'overworld',  2,   'wall',     'wall',     '건물 벽 ($02)'),
+    ('.',  'overworld',  16,  'path',     'path',     '길'),
+    (',',  'overworld',  3,   'grass',    'grass',    '짧은 풀'),
+    (';',  'overworld',  82,  'tallgrass','tallgrass', '긴 풀 (야생 인카운터)'),
+    ('#',  'overworld',  2,   'wall',     'wall',     '건물 벽'),
     ('H',  'overworld',  2,   'wall',     'wall',     '건물 벽 (내부용)'),
-    ('T',  'overworld',  50,  'tree',     'tree',     '나무 ($32)'),
-    ('~',  'overworld',  6,   'water',    'water',    '물 ($06)'),
-    ('D',  'overworld',  20,  'floor',    'floor',    '문 ($14)'),
-    ('L',  'overworld',  20,  'floor',    'floor',    '연구소 문'),
-    ('C',  'overworld',  20,  'floor',    'floor',    '포켓몬센터 문'),
-    ('G',  'overworld',  20,  'floor',    'floor',    '체육관 문'),
-    ('M',  'overworld',  20,  'floor',    'floor',    '마트 문'),
-    ('s',  'overworld',  60,  'floor',    'floor',    '표지판'),
+    ('T',  'overworld',  1,   'tree',     'tree',     '나무'),
+    ('~',  'overworld',  6,   'water',    'water',    '물'),
+    # 문 타일 — overworld.png 시각 검증으로 진짜 문 인덱스 사용
+    ('D',  'overworld',  14,  'door',     'door',     '집 문'),
+    ('L',  'overworld',  30,  'door',     'door',     '연구소 문'),
+    ('C',  'overworld',  77,  'door',     'door',     '포켓몬센터 문'),
+    ('G',  'overworld',  14,  'door',     'door',     '체육관 문'),
+    ('M',  'overworld',  77,  'door',     'door',     '마트 문'),
+    ('s',  'overworld',  60,  'wall',     'wall',     '표지판'),
     ('B',  'overworld',  2,   'wall',     'wall',     '브록/특수'),
     ('P',  'overworld',  0,   'floor',    'floor',    '포켓볼 테이블'),
     ('N',  'overworld',  0,   'grass',    'grass',    'NPC 위치 (런타임 처리)'),
@@ -148,12 +155,12 @@ lines.append("// 포켓몬 레드 실제 타일셋 스프라이트 기반")
 lines.append("#pragma once")
 lines.append("#include <cstring>")
 lines.append("")
-lines.append("// 각 타일: 8글자 너비 × 4행 (1:1 픽셀 매핑, 8x8 src 손실 없이 보존)")
-lines.append("static const int TILE_COLS = 8;   // 터미널 칸 수 (가로)")
-lines.append("static const int TILE_ROWS = 4;   // 터미널 행 수 (세로)")
+lines.append("// 각 타일: 16글자 너비 × 8행 (8x8 px atomic을 2배 확대)")
+lines.append("static const int TILE_COLS = 16;  // 터미널 칸 수 (가로)")
+lines.append("static const int TILE_ROWS = 8;   // 터미널 행 수 (세로)")
 lines.append("")
 lines.append("struct TileArt {")
-lines.append("    const char* rows[4];  // ANSI UTF-8 문자열 (각 8chars 너비)")
+lines.append("    const char* rows[8];  // ANSI UTF-8 문자열 (각 16chars 너비)")
 lines.append("    char mapChar;")
 lines.append("};")
 lines.append("")

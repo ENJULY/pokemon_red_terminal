@@ -1,0 +1,78 @@
+{
+  "cpp_id": "MAP_ROUTE2",
+  "tileset": "overworld",
+  "size": {
+    "w": 20,
+    "h": 36
+  },
+  "north": "MAP_VIR_FOREST",
+  "south": "MAP_VIRIDIAN",
+  "warps": [
+    [
+      12,
+      9,
+      "DIGLETTS_CAVE_ROUTE_2"
+    ],
+    [
+      3,
+      11,
+      "VIRIDIAN_FOREST_NORTH_GATE"
+    ],
+    [
+      15,
+      19,
+      "ROUTE_2_TRADE_HOUSE"
+    ],
+    [
+      16,
+      35,
+      "ROUTE_2_GATE"
+    ],
+    [
+      15,
+      39,
+      "ROUTE_2_GATE"
+    ],
+    [
+      3,
+      43,
+      "VIRIDIAN_FOREST_SOUTH_GATE"
+    ]
+  ],
+  "signs": [
+    [
+      5,
+      65
+    ],
+    [
+      11,
+      11
+    ]
+  ],
+  "objects": [
+    [
+      13,
+      54
+    ],
+    [
+      13,
+      45
+    ]
+  ],
+  "encounters": [
+    [
+      19,
+      3,
+      5,
+      50,
+      "꼬렛"
+    ],
+    [
+      16,
+      3,
+      5,
+      50,
+      "구구"
+    ]
+  ]
+}

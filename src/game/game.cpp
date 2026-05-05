@@ -11,6 +11,9 @@
 #endif
 
 // ─── 정적 데이터 ──────────────────────────────────────────────
+// 스타터 ID (이상해씨/파이리/꼬부기) — update() 안에서도 사용하므로 파일 상단에 선언
+static const int STARTER_IDS[3] = {1, 4, 7};
+
 // pokered 원본 OakSpeechText 번역 (engine/movie/oak_speech + data/text/text_2.asm)
 // 0~3: 오박사 자기소개+포켓몬 설명, 4: 이름 묻기 → NAME_INPUT,
 // 5: 이름 확인(동적), 6~7: 라이벌 소개, 8: 라이벌 이름 묻기 → RIVAL_NAME_INPUT,
@@ -40,11 +43,22 @@ const wchar_t* Game::DEX_LINES[5] = {
     nullptr
 };
 
+// pokered _OaksLabRivalIllTakeYouOnText 기반 — 스타터 받고 출구 향할 때 블루가 가로막음
+const wchar_t* Game::RIVAL_INTERCEPT_LINES[Game::RIVAL_INTERCEPT_COUNT] = {
+    L"블루: 잠깐, 거기!",
+    L"블루: 우리 포켓몬 한 번 비교해보자!",
+    L"블루: 너에게 골라줬으니, 내가 이길 거야!",
+    L"블루: 자, 한 판 붙어보자!",
+};
+
 const wchar_t* Game::LAB_INTRO_LINES[Game::LAB_INTRO_COUNT] = {
-    L"오박사: 나에겐 연구에 쓰던 세 마리의 포켓몬이 있단다.",
-    L"오박사: 테이블 위 몬스터볼 안에 있어. 하나 골라봐!",
-    L"블루: 할아버지! 저도 하나 가져갈게요!",
-    L"오박사: 자, 어떤 녀석이 마음에 드니?",
+    // ── 인터셉트 (풀숲에서, 오박사 풀바디) ──
+    L"오박사: 잠깐! 거긴 위험해!",
+    L"오박사: 키 큰 풀숲엔 야생 포켓몬이 잔뜩 있단다.",
+    L"오박사: 자기 포켓몬도 없이 가면 큰일 나!",
+    L"오박사: 자, 같이 내 연구소로 가자.",
+    // ── 전환 (검정 화면) ──
+    L"...... 오박사를 따라 연구소로 갔다 ......",
 };
 
 // ─── 초기화 ──────────────────────────────────────────────────
@@ -112,6 +126,7 @@ void Game::update(Key key) {
     case Scene::RIVAL_NAME_INPUT:   /* handled separately */   break;
     case Scene::LAB_INTRO:          updateLabIntro(key);       break;
     case Scene::STARTER_SELECT: updateStarterSelect(key);  break;
+    case Scene::RIVAL_INTERCEPT: updateRivalIntercept(key);break;
     case Scene::RECEIVE_DEX:    updateReceiveDex(key);     break;
     case Scene::OVERWORLD: {
         if (!ow_) break;
@@ -151,12 +166,32 @@ void Game::update(Key key) {
             }
             break;
         case OwEvent::OAK_INTERCEPT:
-            labIntroStep_ = 0;
-            // 플레이어를 연구소 위치로 이동
-            player_.mapId = MAP_OAK_LAB;
-            player_.x = 5; player_.y = 8;
-            changeScene(Scene::LAB_INTRO);
+            // 풀숲에서 오박사 등장 — OW cutscene으로 (별도 Scene 안 거침)
+            if (ow_) ow_->startOakIntercept();
             break;
+        case OwEvent::CUTSCENE_END_OAK:
+            // 오박사 cutscene 끝 → 연구소 OW로 워프
+            player_.mapId = MAP_OAK_LAB;
+            player_.x = 5; player_.y = 10;   // 정문 안쪽
+            player_.dir = 1;                  // 위 (오박사 향함)
+            if (ow_) ow_->init();             // OW 재초기화
+            break;
+        case OwEvent::STARTER_TRIGGER:
+            // 연구소 OW에서 오박사 NPC 대화 끝 → 스타터 선택 화면
+            starterCursor_ = 0;
+            changeScene(Scene::STARTER_SELECT);
+            break;
+        case OwEvent::CUTSCENE_END_RIVAL: {
+            // 라이벌 cutscene 끝 → 라이벌 배틀
+            int rivalStarterIdx = (starterCursor_ + 1) % 3;
+            int rivalIds[]  = {STARTER_IDS[rivalStarterIdx], 0, 0};
+            int rivalLvls[] = {5, 0, 0};
+            if (!battle_) battle_ = new Battle(renderer, player_);
+            battle_->startTrainer(player_.rivalName, L"라이벌과의 첫 승부!",
+                                  rivalIds, rivalLvls, 1);
+            changeScene(Scene::TRAINER_BATTLE);
+            break;
+        }
         default: break;
         }
         break;
@@ -235,6 +270,7 @@ void Game::render() {
     case Scene::RIVAL_NAME_INPUT:   renderRivalNameInput(); break;
     case Scene::LAB_INTRO:          renderLabIntro();       break;
     case Scene::STARTER_SELECT:     renderStarterSelect();  break;
+    case Scene::RIVAL_INTERCEPT:    renderRivalIntercept(); break;
     case Scene::RECEIVE_DEX:    renderReceiveDex();     break;
     case Scene::OVERWORLD:
         if (ow_) ow_->render();
@@ -259,6 +295,7 @@ void Game::renderKorean() {
     case Scene::RIVAL_NAME_INPUT:   renderRivalNameInputKorean(); break;
     case Scene::LAB_INTRO:          renderLabIntroKorean();       break;
     case Scene::STARTER_SELECT:     renderStarterSelectKorean();  break;
+    case Scene::RIVAL_INTERCEPT:    renderRivalInterceptKorean(); break;
     case Scene::RECEIVE_DEX:    renderReceiveDexKorean();     break;
     case Scene::OVERWORLD:
         if (ow_) ow_->renderKorean();
@@ -504,15 +541,7 @@ void Game::renderRivalNameInputKorean() {
 }
 
 // ─── 스타터 선택 ─────────────────────────────────────────────
-static const int STARTER_IDS[3] = {1, 4, 7};
-static const char* STARTER_ASCII[3][8] = {
-    // 이상해씨
-    {"  .--.",".O  O.","| -- |","\\    /",".----.",nullptr,nullptr,nullptr},
-    // 파이리
-    {" /\\  /\\"," (oo) "," |  | "," \\--/ ",nullptr,nullptr,nullptr,nullptr},
-    // 꼬부기
-    {" .----."," | OO |"," | -- |"," `----'",nullptr,nullptr,nullptr,nullptr},
-};
+// (STARTER_IDS는 파일 상단으로 이동)
 static const wchar_t* STARTER_NAMES[3] = {L"이상해씨", L"파이리", L"꼬부기"};
 static const wchar_t* STARTER_TYPES[3] = {L"풀/독", L"불꽃", L"물"};
 
@@ -523,59 +552,114 @@ void Game::updateStarterSelect(Key key) {
         // 스타터 지급
         player_.party[0] = makePokemon(STARTER_IDS[starterCursor_], 5);
         player_.partySize = 1;
+        // 원작: 스타터 받고 출구 향하면 블루가 가로막아 배틀.
+        // 우리는 연구소 OW로 돌아간 뒤 즉시 RIVAL_BLOCK cutscene을 실행.
+        if (!ow_) ow_ = new Overworld(renderer, player_);
+        ow_->init();
+        ow_->startRivalBlock();
+        changeScene(Scene::OVERWORLD);
+    }
+}
+
+// ─── 라이벌 인터셉트 ─────────────────────────────────────────
+void Game::updateRivalIntercept(Key key) {
+    if (key != Key::A) return;
+    rivalInterceptStep_++;
+    if (rivalInterceptStep_ >= RIVAL_INTERCEPT_COUNT) {
         // 블루는 상성 포켓몬 선택 (원작 동일)
-        // Bulbasaur(0)→Charmander, Charmander(1)→Squirtle, Squirtle(2)→Bulbasaur
         int rivalStarterIdx = (starterCursor_ + 1) % 3;
         int rivalIds[]  = {STARTER_IDS[rivalStarterIdx], 0, 0};
         int rivalLvls[] = {5, 0, 0};
         if (!battle_) battle_ = new Battle(renderer, player_);
-        battle_->startTrainer(player_.rivalName, L"잠깐, 배틀하자고!",
+        battle_->startTrainer(player_.rivalName, L"라이벌과의 첫 승부!",
                               rivalIds, rivalLvls, 1);
         changeScene(Scene::TRAINER_BATTLE);
     }
 }
 
+void Game::renderRivalIntercept() {
+    int W = renderer.width, H = renderer.height;
+    renderer.fillRect(0,0,W,H,' ', std::string(Color::BG_BLACK)+Color::BLACK);
+    int cx = W/2;
+    int bH=6, bY=H-bH-1, bW=W-4, bX=2;
+    int sprY = bY - INTRO_SPR_H + 5;
+    if (sprY < 1) sprY = 1;
+    int halfW = INTRO_SPR_W / 2;
+    // 블루 풀바디
+    for (int i = 0; i < INTRO_SPR_H; i++)
+        if (SPR_INTRO_RIVAL.rows[i])
+            renderer.printRaw(cx - halfW, sprY + i, SPR_INTRO_RIVAL.rows[i]);
+    // 대화창
+    renderer.drawBox(bX,bY,bW,bH, std::string(Color::BG_BLACK)+Color::WHITE);
+    renderer.fillRect(bX+1,bY+1,bW-2,bH-2,' ',std::string(Color::BG_BLACK)+Color::WHITE);
+    renderer.print(bX+2,bY+1,"[BLUE]", std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
+    if ((frame_/8)%2==0)
+        renderer.print(bX+bW-4,bY+bH-2," v ", std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+}
+
+void Game::renderRivalInterceptKorean() {
+    int H = renderer.height;
+    int bH=6, bY=H-bH-1, bX=2;
+    if (rivalInterceptStep_ < RIVAL_INTERCEPT_COUNT)
+        renderer.printW(bX+2, bY+3, RIVAL_INTERCEPT_LINES[rivalInterceptStep_],
+            std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
+    renderer.printW(bX+2, bY+bH-2, L"[ Z: 계속 ]",
+        std::string(Color::BG_BLACK)+Color::BRIGHT_BLACK);
+}
+
 void Game::renderStarterSelect() {
     int W = renderer.width, H = renderer.height;
-    renderer.fillRect(0,0,W,H,' ', std::string(Color::BG_BLACK)+Color::WHITE);
-    // 테이블
-    int tableY = H/2 - 6;
-    int spacing = W/4;
+    renderer.fillRect(0,0,W,H,' ', std::string(Color::BG_BLACK)+Color::BLACK);
+    // sprite 사이즈는 종족별로 동일 (40×20). 3개를 가로로 배치.
+    // 헤더 텍스트(상단 4줄)가 sprite 박스와 겹치지 않게 tableY를 row 7로 fix.
+    int slotW = W / 3;
+    int tableY = 7;
     for (int i = 0; i < 3; i++) {
-        int cx = spacing * (i+1) - 4;
+        const SpriteData* spr = getSpriteFront(STARTER_IDS[i]);
+        int sw = spr ? spr->width  : SPR_W;
+        int sh = spr ? spr->height : SPR_H;
+        int slotCx = slotW * i + slotW / 2;
+        int cx = slotCx - sw / 2;
+        if (cx < 1) cx = 1;
         std::string bord = (i == starterCursor_) ?
             std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW :
             std::string(Color::BG_BLACK)+Color::BRIGHT_BLACK;
-        renderer.drawBox(cx-2, tableY, 12, 10, bord);
-        // 스프라이트
-        for (int r = 0; r < 8 && STARTER_ASCII[i][r]; r++)
-            renderer.print(cx-1, tableY+1+r, STARTER_ASCII[i][r],
-                std::string(Color::BG_BLACK)+Color::WHITE);
+        renderer.drawBox(cx-1, tableY-1, sw+2, sh+3, bord);
+        if (spr) {
+            for (int r = 0; r < sh; r++) {
+                if (spr->rows[r])
+                    renderer.printRaw(cx, tableY+r, spr->rows[r]);
+            }
+        }
         if (i == starterCursor_)
-            renderer.print(cx+2, tableY+9, "^^^",
+            renderer.print(slotCx - 1, tableY+sh+1, "^^^",
                 std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW);
     }
 }
 
 void Game::renderStarterSelectKorean() {
-    int W = renderer.width, H = renderer.height;
-    int tableY = H/2 - 6;
-    int spacing = W/4;
-    renderer.printW(W/2-10, tableY-4, L"[ 오박사 연구소 ]",
+    int W = renderer.width;
+    int slotW = W / 3;
+    int tableY = 7;  // renderStarterSelect와 일치
+    // 헤더는 화면 상단 row 1~4 고정 (sprite 박스와 겹치지 않게)
+    renderer.printW(W/2-10, 1, L"[ 오박사 연구소 ]",
         std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW);
-    renderer.printW(W/2-12, tableY-3, L"블루가 지켜보고 있다...",
+    renderer.printW(W/2-12, 2, L"블루가 지켜보고 있다...",
         std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
-    renderer.printW(W/2-8, tableY-2, L"포켓몬을 선택하세요!",
+    renderer.printW(W/2-8, 3, L"포켓몬을 선택하세요!",
         std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
-    renderer.printW(W/2-12, tableY-1, L"← → 방향키로 선택, Z로 결정",
+    renderer.printW(W/2-14, 4, L"← → 방향키로 선택, Z로 결정",
         std::string(Color::BG_BLACK)+Color::BRIGHT_BLACK);
+    // 이름/타입 — sprite 박스 아래 (tableY + SPR_H + 여백)
+    int nameY = tableY + SPR_H + 3;
     for (int i = 0; i < 3; i++) {
-        int cx = spacing * (i+1) - 4;
+        int slotCx = slotW * i + slotW / 2;
+        int cx = slotCx - 4;
         std::string col = (i==starterCursor_) ?
             std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW :
             std::string(Color::BG_BLACK)+Color::WHITE;
-        renderer.printW(cx-1, tableY+6, STARTER_NAMES[i], col);
-        renderer.printW(cx-1, tableY+7, STARTER_TYPES[i],
+        renderer.printW(cx, nameY, STARTER_NAMES[i], col);
+        renderer.printW(cx, nameY+1, STARTER_TYPES[i],
             std::string(Color::BG_BLACK)+Color::BRIGHT_GREEN);
     }
 }
@@ -617,30 +701,50 @@ void Game::renderReceiveDexKorean() {
             std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
 }
 
-// ─── 연구소 인트로 ───────────────────────────────────────────
+// ─── 오박사 인터셉트 시퀀스 ──────────────────────────────────
+// 풀숲에서 5단계 대사 후 → 연구소 OVERWORLD 진입.
+// 연구소 안에서 플레이어가 오박사 NPC와 직접 상호작용 → STARTER_SELECT.
 void Game::updateLabIntro(Key key) {
     if (key != Key::A) return;
     labIntroStep_++;
     if (labIntroStep_ >= LAB_INTRO_COUNT) {
-        changeScene(Scene::STARTER_SELECT);
-        starterCursor_ = 0;
+        // 연구소 OW 진입 — 입구(5,11)에 도착, 위쪽 오박사를 향해 걷도록
+        player_.mapId = MAP_OAK_LAB;
+        player_.x = 5; player_.y = 10;  // 문 바로 안쪽
+        player_.dir = 1;                  // 위 방향
+        if (!ow_) ow_ = new Overworld(renderer, player_);
+        ow_->init();
+        changeScene(Scene::OVERWORLD);
     }
 }
 
 void Game::renderLabIntro() {
     int W = renderer.width, H = renderer.height;
-    renderer.fillRect(0,0,W,H,' ', std::string(Color::BG_BLACK)+Color::WHITE);
-    // 연구소 배경 - 테이블
+    renderer.fillRect(0,0,W,H,' ', std::string(Color::BG_BLACK)+Color::BLACK);
+
     int cx = W/2;
-    int ty = H/2 - 4;
-    renderer.print(cx-8, ty,   "+--------+", std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
-    renderer.print(cx-8, ty+1, "|  (o)(o)(o)|", std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW);
-    renderer.print(cx-8, ty+2, "+--------+", std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
-    renderer.print(cx-4, ty+3, "< BLUE >", std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
-    // 대화창
     int bH=6, bY=H-bH-1, bW=W-4, bX=2;
+    int sprY = bY - INTRO_SPR_H + 5;
+    if (sprY < 1) sprY = 1;
+    int halfW = INTRO_SPR_W / 2;
+
+    // 단계별 화면:
+    //   0~3: 풀숲 인터셉트 — 오박사 풀바디
+    //   4:   화면 전환 (검정) — "...오박사를 따라 연구소로 갔다..."
+    if (labIntroStep_ <= 3) {
+        for (int i = 0; i < INTRO_SPR_H; i++)
+            if (SPR_INTRO_OAK.rows[i])
+                renderer.printRaw(cx - halfW, sprY + i, SPR_INTRO_OAK.rows[i]);
+    }
+    // step 4는 빈 화면 (전환 효과)
+
+    // 대화창
     renderer.drawBox(bX,bY,bW,bH, std::string(Color::BG_BLACK)+Color::WHITE);
     renderer.fillRect(bX+1,bY+1,bW-2,bH-2,' ',std::string(Color::BG_BLACK)+Color::WHITE);
+    const char* speaker = (labIntroStep_ == 4) ? "[ — ]" : "[OAK]";
+    const char* speakerCol = (labIntroStep_ == 4) ?
+        Color::BRIGHT_BLACK : Color::BRIGHT_YELLOW;
+    renderer.print(bX+2,bY+1,speaker, std::string(Color::BG_BLACK)+speakerCol);
     if ((frame_/8)%2==0)
         renderer.print(bX+bW-4,bY+bH-2," v ", std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
 }

@@ -1,0 +1,40 @@
+{
+  "cpp_id": "MAP_PLAYER_HOUSE",
+  "tileset": "reds_house",
+  "size": {
+    "w": 8,
+    "h": 8
+  },
+  "north": null,
+  "south": "MAP_PALLET",
+  "warps": [
+    [
+      2,
+      7,
+      "LAST_MAP"
+    ],
+    [
+      3,
+      7,
+      "LAST_MAP"
+    ],
+    [
+      7,
+      1,
+      "REDS_HOUSE_2F"
+    ]
+  ],
+  "signs": [
+    [
+      3,
+      1
+    ]
+  ],
+  "objects": [
+    [
+      5,
+      4
+    ]
+  ],
+  "encounters": []
+}

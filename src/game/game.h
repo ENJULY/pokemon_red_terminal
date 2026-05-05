@@ -13,6 +13,7 @@ enum class Scene {
     RIVAL_NAME_INPUT,   // 라이벌 이름 입력
     LAB_INTRO,          // 연구소 인트로 (오박사 설명 + 블루 등장)
     STARTER_SELECT,     // 스타터 선택
+    RIVAL_INTERCEPT,    // 스타터 받고 출구 향할 때 블루가 가로막음
     RIVAL_BATTLE,       // 라이벌 배틀 (강제)
     RECEIVE_DEX,        // 포켓덱스 수령 대사
     OVERWORLD,          // 오버월드 탐험
@@ -81,8 +82,20 @@ private:
     // ─── 라이벌 배틀 ───
     bool rivalBattleInit_ = false;
 
-    // ─── 연구소 인트로 ───
-    static const int LAB_INTRO_COUNT = 4;
+    // ─── 라이벌 인터셉트 (스타터 받고 출구 향할 때 블루가 가로막음) ───
+    // pokered _OaksLabRivalIllTakeYouOnText 기반.
+    static const int RIVAL_INTERCEPT_COUNT = 4;
+    static const wchar_t* RIVAL_INTERCEPT_LINES[RIVAL_INTERCEPT_COUNT];
+    int rivalInterceptStep_ = 0;
+    void updateRivalIntercept(Key key);
+    void renderRivalIntercept();
+    void renderRivalInterceptKorean();
+
+    // ─── 오박사 인터셉트 시퀀스 ───
+    // 0~3: 풀숲에서 오박사 등장 + 대사 (오박사 풀바디)
+    // 4:   "...오박사를 따라 연구소로 갔다..." 전환
+    // 종료 후 → 연구소 OVERWORLD로 진입. NPC들과 직접 상호작용.
+    static const int LAB_INTRO_COUNT = 5;
     static const wchar_t* LAB_INTRO_LINES[LAB_INTRO_COUNT];
     int labIntroStep_ = 0;
     void updateLabIntro(Key key);

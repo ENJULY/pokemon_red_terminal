@@ -1,0 +1,132 @@
+{
+  "cpp_id": "MAP_VIR_FOREST",
+  "tileset": "forest",
+  "size": {
+    "w": 18,
+    "h": 28
+  },
+  "north": "MAP_PEWTER",
+  "south": "MAP_ROUTE2",
+  "warps": [
+    [
+      1,
+      0,
+      "VIRIDIAN_FOREST_NORTH_GATE"
+    ],
+    [
+      2,
+      0,
+      "VIRIDIAN_FOREST_NORTH_GATE"
+    ],
+    [
+      15,
+      47,
+      "VIRIDIAN_FOREST_SOUTH_GATE"
+    ],
+    [
+      16,
+      47,
+      "VIRIDIAN_FOREST_SOUTH_GATE"
+    ],
+    [
+      17,
+      47,
+      "VIRIDIAN_FOREST_SOUTH_GATE"
+    ],
+    [
+      18,
+      47,
+      "VIRIDIAN_FOREST_SOUTH_GATE"
+    ]
+  ],
+  "signs": [
+    [
+      24,
+      40
+    ],
+    [
+      16,
+      32
+    ],
+    [
+      26,
+      17
+    ],
+    [
+      4,
+      24
+    ],
+    [
+      18,
+      45
+    ],
+    [
+      2,
+      1
+    ]
+  ],
+  "objects": [
+    [
+      16,
+      43
+    ],
+    [
+      30,
+      33
+    ],
+    [
+      30,
+      19
+    ],
+    [
+      2,
+      18
+    ],
+    [
+      25,
+      11
+    ],
+    [
+      12,
+      29
+    ],
+    [
+      1,
+      31
+    ],
+    [
+      27,
+      40
+    ]
+  ],
+  "encounters": [
+    [
+      10,
+      3,
+      5,
+      55,
+      "캐터피"
+    ],
+    [
+      13,
+      3,
+      5,
+      35,
+      "뿔충이"
+    ],
+    [
+      25,
+      3,
+      5,
+      5,
+      "피카츄"
+    ],
+    [
+      11,
+      4,
+      6,
+      5,
+      "메타포드"
+    ]
+  ]
+}

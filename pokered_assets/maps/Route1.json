@@ -1,0 +1,43 @@
+{
+  "cpp_id": "MAP_ROUTE1",
+  "tileset": "overworld",
+  "size": {
+    "w": 20,
+    "h": 36
+  },
+  "north": "MAP_VIRIDIAN",
+  "south": "MAP_PALLET",
+  "warps": [],
+  "signs": [
+    [
+      9,
+      27
+    ]
+  ],
+  "objects": [
+    [
+      5,
+      24
+    ],
+    [
+      15,
+      13
+    ]
+  ],
+  "encounters": [
+    [
+      19,
+      2,
+      4,
+      50,
+      "꼬렛"
+    ],
+    [
+      16,
+      2,
+      4,
+      50,
+      "구구"
+    ]
+  ]
+}

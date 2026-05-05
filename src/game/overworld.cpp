@@ -60,6 +60,113 @@ OwEvent Overworld::popEvent() {
     return ev;
 }
 
+// ─── OW cutscene 시작 ────────────────────────────────────────
+void Overworld::startOakIntercept() {
+    // 오박사가 player 뒤(아래)에서 등장 → player 옆까지 따라옴 → 대사 → 페이드 → 연구소
+    // (원작도 player 풀숲 진입 시도 시 OAK가 따라와 막음 — 뒷모습 등장)
+    state_.cutscene = {};
+    state_.cutscene.type     = CutsceneType::OAK_INTERCEPT;
+    state_.cutscene.step     = 0;
+    state_.cutscene.ax       = state_.px;
+    state_.cutscene.ay       = state_.py + 5;   // 뒤(아래)에서
+    state_.cutscene.targetX  = state_.px;
+    state_.cutscene.targetY  = state_.py + 1;   // player 아래 1칸
+    state_.cutscene.adir     = 1;  // 위 (player 향함, 뒷모습)
+    state_.cutscene.spriteId = NPC_SPR_OAK;
+    state_.cutscene.walkTimer = 8;
+    state_.cutscene.dialogIdx = 0;
+}
+
+void Overworld::startRivalBlock() {
+    // 블루가 player 아래쪽 출구 부근에서 등장 → 옆에 멈춤 → 대사 → 배틀
+    state_.cutscene = {};
+    state_.cutscene.type     = CutsceneType::RIVAL_BLOCK;
+    state_.cutscene.step     = 0;
+    state_.cutscene.ax       = state_.px;
+    state_.cutscene.ay       = state_.py + 4;   // 출구 쪽에서 등장
+    state_.cutscene.targetX  = state_.px;
+    state_.cutscene.targetY  = state_.py + 1;
+    state_.cutscene.adir     = 1;  // 위 (player 마주봄)
+    state_.cutscene.spriteId = NPC_SPR_BLUE;
+    state_.cutscene.walkTimer = 8;
+    state_.cutscene.dialogIdx = 0;
+}
+
+// ─── cutscene 단계 진행 ──────────────────────────────────────
+static const wchar_t* OAK_CUT_LINES[] = {
+    L"오박사: 잠깐! 거긴 위험해!",
+    L"오박사: 야생 포켓몬은 풀숲 어디든 있단다.",
+    L"오박사: 자기 포켓몬 없이는 못 가!",
+    L"오박사: 자, 같이 내 연구소로 가자.",
+    nullptr
+};
+static const wchar_t* RIVAL_CUT_LINES[] = {
+    L"블루: 잠깐! 거기 서!",
+    L"블루: 우리 포켓몬 한 번 비교해보자!",
+    L"블루: 내가 이길 거야!",
+    L"블루: 한 판 붙어보자!",
+    nullptr
+};
+
+bool Overworld::cutsceneActive() const {
+    return state_.cutscene.type != CutsceneType::NONE;
+}
+
+void Overworld::updateCutscene(Key key) {
+    OwCutscene& cs = state_.cutscene;
+
+    // ── 페이드 아웃 (오박사 cutscene 끝) ──
+    if (cs.fadingOut) {
+        cs.fadeFrame--;
+        if (cs.fadeFrame <= 0) {
+            // OAK_INTERCEPT 끝 → 연구소 OW 워프 emit
+            cs.type = CutsceneType::NONE;
+            state_.pendingEvent = OwEvent::CUTSCENE_END_OAK;
+        }
+        return;
+    }
+
+    // ── walking ── (자동 걷기, target까지)
+    if (cs.step == 0) {
+        cs.walkTimer--;
+        if (cs.walkTimer <= 0) {
+            // 한 칸 이동
+            int dx = (cs.targetX > cs.ax) - (cs.targetX < cs.ax);
+            int dy = (cs.targetY > cs.ay) - (cs.targetY < cs.ay);
+            if (dx || dy) {
+                cs.ax += dx; cs.ay += dy;
+                cs.adir = (dy > 0) ? 0 : (dy < 0) ? 1 : (dx < 0) ? 2 : 3;
+                cs.walkTimer = 8;
+            } else {
+                // 도착 — 대사 시작
+                cs.step = 1;
+            }
+        }
+        return;
+    }
+
+    // ── dialog ── (key 입력으로 대사 진행)
+    if (cs.step == 1) {
+        if (key == Key::A || key == Key::B) {
+            cs.dialogIdx++;
+            const wchar_t** lines = (cs.type == CutsceneType::OAK_INTERCEPT)
+                                  ? OAK_CUT_LINES : RIVAL_CUT_LINES;
+            if (!lines[cs.dialogIdx]) {
+                // 대사 끝
+                if (cs.type == CutsceneType::OAK_INTERCEPT) {
+                    cs.fadingOut = true;
+                    cs.fadeFrame = 18;
+                } else {
+                    // RIVAL_BLOCK: 즉시 배틀 emit
+                    cs.type = CutsceneType::NONE;
+                    state_.pendingEvent = OwEvent::CUTSCENE_END_RIVAL;
+                }
+            }
+        }
+        return;
+    }
+}
+
 void Overworld::onReturnFromBattle(bool won) {
     // 패배 시 팔레트시티로 리셋
     if (!won) {
@@ -147,13 +254,29 @@ void Overworld::tryMove(int dx, int dy) {
         return;
     }
 
+    // 좌우 경계 + 인접 맵 없을 때의 위/아래 경계 — 맵 밖(검정 영역)으로 못 나감
+    if (nx < 0 || nx >= m->mapW) return;
+    if (ny < 0 || ny >= m->mapH) return;
+
     char t = getTile(m, nx, ny);
     if (!tileWalkable(t)) {
-        // 문 타일 / R2F 사다리(p): 워프 즉시 처리 (애니메이션 없음)
-        if (t == 'D' || t == 'L' || t == 'C' || t == 'M' || t == 'G' || t == 'p') {
+        // 워프 트리거 char (player가 닿는 순간 워프):
+        //   D=문 / L=lab door / C=player house 정문 / M=mart / G=gym
+        //   p=R2F 사다리 / ? = OakLab 도어 / w=R1F→R2F 사다리 / j=R2F→R1F 사다리
+        if (t == 'D' || t == 'L' || t == 'C' || t == 'M' || t == 'G' ||
+            t == 'p' || t == '?' || t == 'w' || t == 'j') {
             checkWarps(nx, ny);
         }
         return;
+    }
+
+    // NPC/트레이너 충돌 — 같은 좌표에 NPC가 있으면 차단
+    for (int i = 0; i < m->numNpcs; i++) {
+        if (m->npcs[i].x == nx && m->npcs[i].y == ny) return;
+    }
+    for (int i = 0; i < m->numTrainers; i++) {
+        if (!m->trainers[i].defeated &&
+            m->trainers[i].x == nx && m->trainers[i].y == ny) return;
     }
 
     // 걷기 애니메이션 시작: 논리 좌표는 즉시 갱신, 시각만 보간
@@ -276,6 +399,12 @@ bool Overworld::checkTrainerSight() {
 void Overworld::update(Key key) {
     state_.frame++;
 
+    // cutscene 모드 — player 입력 차단, 자동 진행
+    if (cutsceneActive()) {
+        updateCutscene(key);
+        return;
+    }
+
     // 걷기 애니메이션 진행 — 도중엔 입력 무시
     if (state_.moving > 0) {
         state_.moving--;
@@ -308,6 +437,11 @@ void Overworld::update(Key key) {
             const NpcDef* npc = state_.dialog.npc;
             if (state_.dialog.lineIdx >= 4 || !npc->lines[state_.dialog.lineIdx]) {
                 state_.dialog.active = false;
+
+                // NPC trigger 처리 (예: 오박사 → STARTER_TRIGGER)
+                if (npc->trigger == 1) {
+                    state_.pendingEvent = OwEvent::STARTER_TRIGGER;
+                }
 
                 // 상록시티 첫 NPC (소포 배달) 이벤트
                 if (state_.mapId == MAP_VIRIDIAN && npc->x == 3 && npc->y == 7) {
@@ -411,15 +545,25 @@ void Overworld::renderKorean() {
 
                 char tile_char = ' ';
                 bool isNpc = false, isTr = false;
+                int  npcSpriteId = NPC_SPR_MOM;
+                int  trSpriteId  = NPC_SPR_GENTLEMAN;
                 bool offMap = false;
 
                 if (m && mx >= 0 && mx < m->mapW && my >= 0 && my < m->mapH) {
                     tile_char = getTile(m, mx, my);
                     for (int i = 0; i < m->numNpcs; i++)
-                        if (m->npcs[i].x == mx && m->npcs[i].y == my) { isNpc = true; break; }
+                        if (m->npcs[i].x == mx && m->npcs[i].y == my) {
+                            isNpc = true;
+                            npcSpriteId = m->npcs[i].spriteId;
+                            break;
+                        }
                     for (int i = 0; i < m->numTrainers; i++)
                         if (!m->trainers[i].defeated &&
-                            m->trainers[i].x == mx && m->trainers[i].y == my) { isTr = true; break; }
+                            m->trainers[i].x == mx && m->trainers[i].y == my) {
+                            isTr = true;
+                            trSpriteId = m->trainers[i].spriteId;
+                            break;
+                        }
                 } else {
                     offMap = true;
                 }
@@ -437,22 +581,15 @@ void Overworld::renderKorean() {
                     if (art->rows[r]) ren_.printRaw(sx, sy + r, art->rows[r]);
                 }
 
-                // NPC/Trainer 오버레이 — 실제 GB sprite 사용
-                if (isNpc) {
-                    // SPR_MOM: 16 chars × 8 rows = 1 walkable 타일에 정확히 들어감
+                // NPC/Trainer 오버레이 — spriteId로 lookup (sprites.h getNpcSpritePtr)
+                // 16 chars × 8 rows = 1 walkable 타일에 정확히 들어감
+                if (isNpc || isTr) {
+                    const OwPlayerFrame* spr =
+                        getNpcSpritePtr(isNpc ? npcSpriteId : trSpriteId);
                     for (int r = 0; r < 8; r++) {
-                        if (SPR_MOM.rows[r])
-                            ren_.printRaw(sx, sy + r, SPR_MOM.rows[r]);
+                        if (spr->rows[r])
+                            ren_.printRaw(sx, sy + r, spr->rows[r]);
                     }
-                } else if (isTr) {
-                    // 트레이너 임시 ASCII (sprite 미추출)
-                    const char* col = "\x1b[1;31m";
-                    int nx0 = sx + 4, ny0 = sy + 2;
-                    char buf[64];
-                    snprintf(buf, 64, "%s   __   \x1b[0m", col);   ren_.printRaw(nx0, ny0,     buf);
-                    snprintf(buf, 64, "%s  /oo\\  \x1b[0m", col);  ren_.printRaw(nx0, ny0 + 1, buf);
-                    snprintf(buf, 64, "%s |/||\\| \x1b[0m", col);  ren_.printRaw(nx0, ny0 + 2, buf);
-                    snprintf(buf, 64, "%s  /  \\  \x1b[0m", col);  ren_.printRaw(nx0, ny0 + 3, buf);
                 }
             }
         }
@@ -494,6 +631,49 @@ void Overworld::renderKorean() {
             if (yy < 0 || yy >= viewH) continue;
             if (frm.rows[r]) ren_.printRaw(spriteX, yy, frm.rows[r]);
         }
+    }
+
+    // ── Cutscene actor + 대사창 + 페이드 ──────────────────────
+    if (cutsceneActive()) {
+        const OwCutscene& cs = state_.cutscene;
+
+        // 페이드 아웃 (오박사 끝): 검정 화면
+        if (cs.fadingOut) {
+            ren_.fillRect(0, 0, W, H, ' ',
+                std::string(Color::BG_BLACK) + Color::BLACK);
+            return;
+        }
+
+        // actor sprite — dir에 따라 down/up 선택 (dir=1 위로 걸어갈 때 up idle)
+        int tilesX = W / 16;
+        int tilesY = viewH / 8;
+        int camX = state_.px - tilesX / 2;
+        int camY = state_.py - tilesY / 2;
+        int sx = (cs.ax - camX) * 16;
+        int sy = (cs.ay - camY) * 8;
+        const OwPlayerFrame* spr = getNpcSpritePtr(cs.spriteId, cs.adir);
+        if (sy >= 0 && sy + 8 <= viewH) {
+            for (int r = 0; r < 8; r++)
+                if (spr->rows[r])
+                    ren_.printRaw(sx, sy + r, spr->rows[r]);
+        }
+
+        // 대사창 (step >= 1)
+        if (cs.step >= 1) {
+            const wchar_t** lines = (cs.type == CutsceneType::OAK_INTERCEPT)
+                                   ? OAK_CUT_LINES : RIVAL_CUT_LINES;
+            if (lines[cs.dialogIdx]) {
+                ren_.printW(2, boxY + 2, lines[cs.dialogIdx],
+                    std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
+                ren_.printW(2, boxY + 4, L"[ Z: 다음 ]",
+                    std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+            }
+        } else {
+            // walking 단계 — "..." 정도만
+            ren_.printW(2, boxY + 2, L"......",
+                std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
+        }
+        return;
     }
 
     // 깨어나는 시퀀스 대사

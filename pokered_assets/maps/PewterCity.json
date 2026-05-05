@@ -1,0 +1,100 @@
+{
+  "cpp_id": "MAP_PEWTER",
+  "tileset": "overworld",
+  "size": {
+    "w": 20,
+    "h": 18
+  },
+  "north": null,
+  "south": "MAP_VIR_FOREST",
+  "warps": [
+    [
+      14,
+      7,
+      "MUSEUM_1F"
+    ],
+    [
+      19,
+      5,
+      "MUSEUM_1F"
+    ],
+    [
+      16,
+      17,
+      "PEWTER_GYM"
+    ],
+    [
+      29,
+      13,
+      "PEWTER_NIDORAN_HOUSE"
+    ],
+    [
+      23,
+      17,
+      "PEWTER_MART"
+    ],
+    [
+      7,
+      29,
+      "PEWTER_SPEECH_HOUSE"
+    ],
+    [
+      13,
+      25,
+      "PEWTER_POKECENTER"
+    ]
+  ],
+  "signs": [
+    [
+      19,
+      29
+    ],
+    [
+      33,
+      19
+    ],
+    [
+      24,
+      17
+    ],
+    [
+      14,
+      25
+    ],
+    [
+      15,
+      9
+    ],
+    [
+      11,
+      17
+    ],
+    [
+      25,
+      23
+    ]
+  ],
+  "objects": [
+    [
+      8,
+      15
+    ],
+    [
+      17,
+      25
+    ],
+    [
+      27,
+      17
+    ],
+    [
+      26,
+      25
+    ],
+    [
+      35,
+      16
+    ]
+  ],
+  "encounters": []
+}

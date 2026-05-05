@@ -104,17 +104,18 @@ void Renderer::print(int x, int y, const std::string& text, const std::string& c
 
 void Renderer::drawBox(int x, int y, int w, int h, const std::string& color) {
     if (w < 2 || h < 2) return;
-    setCell(x,         y,         '+', color);
-    setCell(x + w - 1, y,         '+', color);
-    setCell(x,         y + h - 1, '+', color);
-    setCell(x + w - 1, y + h - 1, '+', color);
+    // 유니코드 box-drawing char로 진한 직선 테두리 (이전: + - | 점선 같음)
+    setCellU(x,         y,         "\xe2\x94\x8c", color);  // ┌
+    setCellU(x + w - 1, y,         "\xe2\x94\x90", color);  // ┐
+    setCellU(x,         y + h - 1, "\xe2\x94\x94", color);  // └
+    setCellU(x + w - 1, y + h - 1, "\xe2\x94\x98", color);  // ┘
     for (int i = 1; i < w - 1; i++) {
-        setCell(x + i, y,         '-', color);
-        setCell(x + i, y + h - 1, '-', color);
+        setCellU(x + i, y,         "\xe2\x94\x80", color);  // ─
+        setCellU(x + i, y + h - 1, "\xe2\x94\x80", color);  // ─
     }
     for (int j = 1; j < h - 1; j++) {
-        setCell(x,         y + j, '|', color);
-        setCell(x + w - 1, y + j, '|', color);
+        setCellU(x,         y + j, "\xe2\x94\x82", color);  // │
+        setCellU(x + w - 1, y + j, "\xe2\x94\x82", color);  // │
     }
 }
 
@@ -125,13 +126,35 @@ void Renderer::fillRect(int x, int y, int w, int h, char ch, const std::string& 
 }
 
 void Renderer::printW(int x, int y, const std::wstring& text, const std::string& color) {
-    moveCursor(x, y);
-    if (!color.empty()) printf("%s", color.c_str());
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    DWORD written = 0;
-    WriteConsoleW(hOut, text.c_str(), (DWORD)text.size(), &written, nullptr);
-    if (!color.empty()) printf("%s", Color::RESET);
-    fflush(stdout);
+    // 한글 잔상 fix: wchar를 UTF-8로 변환 후 buffer cell에 저장 → flush가 diff 출력.
+    // wide char (한글/한자, CJK 0x1100~0xFFFF)는 콘솔 2 cell 차지 → 두 번째 cell은
+    // sentinel "\x02"로 두고 flush에서 skip 처리.
+    int cx = x;
+    for (wchar_t wc : text) {
+        if (cx >= width) break;
+        std::string utf8;
+        if (wc < 0x80) {
+            utf8 = std::string(1, (char)wc);
+        } else if (wc < 0x800) {
+            char b[3] = { (char)(0xC0 | (wc >> 6)),
+                          (char)(0x80 | (wc & 0x3F)), 0 };
+            utf8 = b;
+        } else {
+            char b[4] = { (char)(0xE0 | (wc >> 12)),
+                          (char)(0x80 | ((wc >> 6) & 0x3F)),
+                          (char)(0x80 | (wc & 0x3F)), 0 };
+            utf8 = b;
+        }
+        setCellU(cx, y, utf8, color);
+        cx++;
+        // wide char (CJK)는 콘솔에서 2 cell 차지 — 두 번째 자리에 sentinel
+        bool wide = (wc >= 0x1100 && wc <= 0xFFFF) &&
+                    !(wc >= 0xFF61 && wc <= 0xFF9F);  // 반각 가나는 single
+        if (wide && cx < width) {
+            setCellU(cx, y, "\x02", color);  // flush가 skip할 sentinel
+            cx++;
+        }
+    }
 }
 
 // ANSI+UTF-8 문자열을 셀 단위로 파싱하여 버퍼에 저장.
@@ -204,6 +227,13 @@ void Renderer::flush() {
                 int i = idx(x, y);
                 if (curr_[i].ch == prev_[i].ch && curr_[i].color == prev_[i].color)
                     break;
+                // wide char(한글) 두 번째 자리 sentinel — 콘솔엔 이미 wide char가 차지.
+                // 출력 안 하고 prev 동기화만 (buffer index만 +1, console cursor는 자동 +2됨)
+                if (curr_[i].ch == "\x02") {
+                    prev_[i] = curr_[i];
+                    x++;
+                    continue;
+                }
                 const std::string& col = curr_[i].color;
                 if (col != lastColor) {
                     if (col.empty()) printf("%s", Color::RESET);

@@ -1,0 +1,60 @@
+{
+  "cpp_id": "MAP_PALLET",
+  "tileset": "overworld",
+  "size": {
+    "w": 20,
+    "h": 18
+  },
+  "north": "MAP_ROUTE1",
+  "south": null,
+  "warps": [
+    [
+      5,
+      5,
+      "REDS_HOUSE_1F"
+    ],
+    [
+      13,
+      5,
+      "BLUES_HOUSE"
+    ],
+    [
+      12,
+      11,
+      "OAKS_LAB"
+    ]
+  ],
+  "signs": [
+    [
+      13,
+      13
+    ],
+    [
+      7,
+      9
+    ],
+    [
+      3,
+      5
+    ],
+    [
+      11,
+      5
+    ]
+  ],
+  "objects": [
+    [
+      8,
+      5
+    ],
+    [
+      3,
+      8
+    ],
+    [
+      11,
+      14
+    ]
+  ],
+  "encounters": []
+}

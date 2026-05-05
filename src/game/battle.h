@@ -6,6 +6,7 @@
 enum class BattleType { WILD, TRAINER, BOSS };
 
 enum class BattlePhase {
+    INTRO_TRANSITION,// 배틀 시작 효과 (검정/흰 깜빡임 → SHOW_MSG)
     CHOOSE_ACTION,   // 커맨드 선택 (싸운다/가방/포켓몬/도망)
     CHOOSE_MOVE,     // 기술 선택
     CHOOSE_ITEM,     // 아이템 선택
@@ -58,6 +59,9 @@ struct BattleState {
     bool         switchAfterFaint; // 기절 후 강제 교체 여부
 
     int          frame;
+    int          transitionFrame;       // INTRO_TRANSITION 카운트다운
+    bool         turnStarted;           // CHOOSE_MOVE에서 행동 결정됐는가 (false면 SHOW_MSG는 인사 메시지)
+    bool         trainerIntroShown;     // 트레이너 풀바디 인트로 1회만 표시
 };
 
 class Battle {

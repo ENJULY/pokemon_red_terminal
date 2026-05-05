@@ -1,5 +1,14 @@
-build/*.exe
+# 빌드 임시 산출물만 제외 — .exe + DLL은 git에 포함 (다른 PC에서 컴파일러 없이 실행용)
 build/*.obj
-build/err.txt
-build_ci.bat
+build/*.o
+build/*.txt
+build/hello.*
 *.o
+_dbg_*
+
+# editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

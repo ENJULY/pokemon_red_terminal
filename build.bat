@@ -24,7 +24,7 @@ echo Compiler: %GXX%
 "%GXX%" --version | findstr /i "g++"
 
 :: 실행 중인 게임 종료 (exe 잠금 방지)
-taskkill /F /IM PokemonRed.exe 2>/dev/null
+taskkill /F /IM PokemonRed.exe 2>nul
 
 if not exist build mkdir build
 
@@ -50,9 +50,9 @@ if not exist build\PokemonRed.exe (
 )
 
 :: DLL 백업 복사 (정적 링크 실패 시 대비)
-if exist "%MGW%\bin\libwinpthread-1.dll" copy /Y "%MGW%\bin\libwinpthread-1.dll" build\ >/dev/null
-if exist "%MGW%\bin\libgcc_s_seh-1.dll"  copy /Y "%MGW%\bin\libgcc_s_seh-1.dll"  build\ >/dev/null
-if exist "%MGW%\bin\libstdc++-6.dll"     copy /Y "%MGW%\bin\libstdc++-6.dll"     build\ >/dev/null
+if exist "%MGW%\bin\libwinpthread-1.dll" copy /Y "%MGW%\bin\libwinpthread-1.dll" build\ >nul
+if exist "%MGW%\bin\libgcc_s_seh-1.dll"  copy /Y "%MGW%\bin\libgcc_s_seh-1.dll"  build\ >nul
+if exist "%MGW%\bin\libstdc++-6.dll"     copy /Y "%MGW%\bin\libstdc++-6.dll"     build\ >nul
 
 echo.
 echo [OK] Build succeeded
