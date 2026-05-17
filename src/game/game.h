@@ -24,6 +24,7 @@ enum class Scene {
     MART_EVENT,         // 마트 소포 이벤트
     GAME_OVER,          // 전멸
     ENDING,             // 브록 클리어 엔딩
+    WARP_MENU,          // 디버그: Ctrl+M 워프 메뉴
 };
 
 class Game {
@@ -127,6 +128,11 @@ private:
     // ─── 게임 오버 ───
     void renderGameOver();
     void updateGameOver(Key key);
+
+    // ─── 디버그 워프 메뉴 ───
+    int warpCursor_ = 0;
+    void updateWarpMenu(Key key);
+    void renderWarpMenuKorean();
 
     // ─── 엔딩 ───
     int endingStep_ = 0;

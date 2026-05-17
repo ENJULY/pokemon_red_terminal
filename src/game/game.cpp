@@ -130,6 +130,12 @@ void Game::update(Key key) {
     case Scene::RECEIVE_DEX:    updateReceiveDex(key);     break;
     case Scene::OVERWORLD: {
         if (!ow_) break;
+        // Ctrl+M → 디버그 워프 메뉴
+        if (key == Key::WARP_MENU) {
+            changeScene(Scene::WARP_MENU);
+            warpCursor_ = 0;
+            break;
+        }
         ow_->update(key);
         OwEvent ev = ow_->popEvent();
         switch (ev) {
@@ -143,9 +149,9 @@ void Game::update(Key key) {
             if (m && ow_->eventData() < m->numTrainers) {
                 TrainerDef& tr = const_cast<TrainerDef&>(m->trainers[ow_->eventData()]);
                 if (!battle_) battle_ = new Battle(renderer, player_);
+                int pSize = tr.partyIds[2] ? 3 : (tr.partyIds[1] ? 2 : 1);
                 battle_->startTrainer(tr.name, tr.preBattleText,
-                    tr.partyIds, tr.partyLevels,
-                    (tr.partyIds[1] ? 2 : 1));
+                    tr.partyIds, tr.partyLevels, pSize, tr.introSpriteId);
                 changeScene(Scene::TRAINER_BATTLE);
             }
             break;
@@ -158,6 +164,10 @@ void Game::update(Key key) {
         case OwEvent::ENTER_POKEMON_CENTER:
             changeScene(Scene::POKEMON_CENTER);
             centerStep_ = 0;
+            break;
+        case OwEvent::NURSE_HEAL:
+            // 간호사 조이 대화 끝 → 조용히 회복 (대화 자체가 회복 안내)
+            healAll(player_);
             break;
         case OwEvent::ENTER_MART:
             if (!player_.deliveredParcel) {
@@ -259,6 +269,9 @@ void Game::update(Key key) {
     case Scene::ENDING:
         updateEnding(key);
         break;
+    case Scene::WARP_MENU:
+        updateWarpMenu(key);
+        break;
     default: break;
     }
 }
@@ -308,7 +321,81 @@ void Game::renderKorean() {
     case Scene::POKEMON_CENTER: renderCenterKorean();         break;
     case Scene::MART_EVENT:     renderMartKorean();           break;
     case Scene::ENDING:         renderEndingKorean();         break;
+    case Scene::WARP_MENU:      renderWarpMenuKorean();       break;
     default: break;
+    }
+}
+
+// ─── 디버그 워프 메뉴 (Ctrl+M) ────────────────────────────
+struct WarpMenuEntry { int mapId; int x; int y; const wchar_t* name; };
+static const WarpMenuEntry WARP_MAPS[] = {
+    {0,  10, 10, L"팔레트시티"},
+    {1,  10, 30, L"1번도로"},
+    {2,  20, 30, L"상록시티"},
+    {3,  10, 60, L"2번도로"},
+    {4,  16, 40, L"상록숲"},
+    {5,  20, 30, L"회색시티"},
+    {6,  5,  10, L"오박사 연구소"},
+    {7,  3,  6,  L"주인공의 집 1F"},
+    {8,  4,  10, L"회색시티 체육관"},
+    {9,  3,  6,  L"주인공의 방 2F"},
+    {10, 3,  6,  L"라이벌의 집"},
+    {11, 3,  7,  L"상록 포센"},
+    {12, 3,  7,  L"펠터 포센"},
+    {13, 3,  7,  L"상록 마트"},
+    {14, 3,  7,  L"펠터 마트"},
+    {15, 4,  7,  L"2번도로 게이트"},
+    {16, 4,  7,  L"상록숲 북쪽 게이트"},
+    {17, 4,  7,  L"상록숲 남쪽 게이트"},
+};
+static const int WARP_MAPS_COUNT = sizeof(WARP_MAPS) / sizeof(WARP_MAPS[0]);
+
+void Game::updateWarpMenu(Key key) {
+    if (key == Key::UP) {
+        warpCursor_ = (warpCursor_ - 1 + WARP_MAPS_COUNT) % WARP_MAPS_COUNT;
+    } else if (key == Key::DOWN) {
+        warpCursor_ = (warpCursor_ + 1) % WARP_MAPS_COUNT;
+    } else if (key == Key::A) {
+        const WarpMenuEntry& w = WARP_MAPS[warpCursor_];
+        player_.mapId = w.mapId;
+        player_.x = w.x;
+        player_.y = w.y;
+
+        // 디버그 편의: 풀베기 가능한 포켓몬 없으면 더미 1마리 자동 지급
+        // (이미 풀베기를 아는 포켓몬이 파티에 있으면 추가 안 함)
+        if (!playerHasCut(player_) && player_.partySize < 6) {
+            Pokemon dummy = makePokemon(1, 10);  // 이상해씨 L10 (풀 타입 → 풀베기 자연스러움)
+            if (dummy.species) {
+                // 첫 번째 기술 슬롯을 풀베기로 강제 교체
+                dummy.moves[0].moveId = MOVE_CUT;
+                dummy.moves[0].pp     = getMoveData(MOVE_CUT).maxPP;
+                if (dummy.numMoves < 1) dummy.numMoves = 1;
+                player_.party[player_.partySize++] = dummy;
+            }
+        }
+
+        if (ow_) ow_->init();
+        changeScene(Scene::OVERWORLD);
+    } else if (key == Key::B || key == Key::ESCAPE) {
+        changeScene(Scene::OVERWORLD);
+    }
+}
+
+void Game::renderWarpMenuKorean() {
+    int W = renderer.width, H = renderer.height;
+    renderer.fillRect(0, 0, W, H, ' ', std::string(Color::BG_BLACK)+Color::WHITE);
+    renderer.printW(2, 1, L"=== 디버그 워프 메뉴 (Ctrl+M) ===",
+        std::string(Color::BG_BLACK)+Color::BRIGHT_CYAN);
+    renderer.printW(2, 2, L"위/아래: 선택  A(Z/Enter): 확인  B/ESC: 취소",
+        std::string(Color::BG_BLACK)+Color::WHITE);
+    for (int i = 0; i < WARP_MAPS_COUNT; i++) {
+        const wchar_t* arrow = (i == warpCursor_) ? L"▶ " : L"  ";
+        wchar_t buf[80];
+        swprintf(buf, 80, L"%lsMAP_%d  %ls", arrow, WARP_MAPS[i].mapId, WARP_MAPS[i].name);
+        std::string color = (i == warpCursor_)
+            ? std::string(Color::BG_BLACK)+Color::BRIGHT_YELLOW
+            : std::string(Color::BG_BLACK)+Color::WHITE;
+        renderer.printW(2, 4 + i, buf, color);
     }
 }
 

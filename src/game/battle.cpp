@@ -48,11 +48,12 @@ void Battle::startWild(int speciesId, int level) {
 }
 
 void Battle::startTrainer(const wchar_t* name, const wchar_t* preText,
-                          int* ids, int* levels, int sz) {
+                          int* ids, int* levels, int sz, int introId) {
     state_ = {};
     state_.type = BattleType::TRAINER;
     state_.trainerName = name;
     state_.trainerPreText = preText;
+    state_.trainerIntroId = introId;
     state_.enemyPartySize = sz;
     for (int i = 0; i < sz && i < 3; i++)
         state_.enemyParty[i] = makePokemon(ids[i], levels[i]);
@@ -72,7 +73,7 @@ void Battle::startTrainer(const wchar_t* name, const wchar_t* preText,
 void Battle::startBrock() {
     int ids[]    = {74, 95};
     int lvls[]   = {12, 14};
-    startTrainer(L"관장 브록", L"바위 포켓몬은 최강이다!", ids, lvls, 2);
+    startTrainer(L"관장 브록", L"바위 포켓몬은 최강이다!", ids, lvls, 2, 3);  // 3=BROCK intro
     state_.type = BattleType::BOSS;
 }
 
@@ -802,7 +803,16 @@ void Battle::renderKorean() {
     int enSprY = 1;
     if (trainerIntro && state_.trainerName) {
         const IntroSprite* trSpr = &SPR_INTRO_OAK;
-        if (wcscmp(state_.trainerName, pl_.rivalName) == 0)
+        switch (state_.trainerIntroId) {
+            case 1: trSpr = &SPR_INTRO_RIVAL; break;
+            case 2: trSpr = &SPR_INTRO_RED; break;
+            case 3: trSpr = &SPR_INTRO_BROCK; break;
+            case 4: trSpr = &SPR_INTRO_BUG_CATCHER; break;
+            case 5: trSpr = &SPR_INTRO_COOLTRAINER_M; break;
+            default: trSpr = &SPR_INTRO_OAK; break;
+        }
+        // 라이벌 이름 매칭 (기존 동작 호환 — 인트로 ID 0이면서 이름이 라이벌이면 RIVAL)
+        if (state_.trainerIntroId == 0 && wcscmp(state_.trainerName, pl_.rivalName) == 0)
             trSpr = &SPR_INTRO_RIVAL;
         int spX = W - INTRO_SPR_W - 2;
         if (spX < 0) spX = 0;

@@ -8,15 +8,42 @@
 #define swprintf _snwprintf
 #endif
 
+// ─── 임시 NpcDef 버퍼 (표지판/잠긴 도어 / 풀베기 메시지용) ─────
+// 표지판/잠긴문/풀베기는 NPC가 아니지만 dialog 시스템을 재활용하기 위해 NpcDef 형태로 wrap.
+static NpcDef _signBuffer;
+static NpcDef _lockedDoorBuffer = {
+    0, 0,
+    { L"문이 잠겨있다...", nullptr, nullptr, nullptr },
+    0, 0
+};
+static NpcDef _cutTreeNeedSkillBuffer = {
+    0, 0,
+    { L"이 나무는 풀베기로 베어낼 수 있을 것 같다.",
+      L"포켓몬에게 풀베기를 가르쳐야 한다.",
+      nullptr, nullptr },
+    0, 0
+};
+static NpcDef _cutTreeUsedBuffer = {
+    0, 0,
+    { L"포켓몬이 풀베기를 사용했다!",
+      L"나무가 베어졌다.",
+      nullptr, nullptr },
+    0, 0
+};
+
 // ─── 주인공 GB 도트 스프라이트 매핑 (8 프레임, 4방향 × idle/walk) ─────
 //   0 = down idle, 1 = up idle, 2 = left idle, 3 = right idle
 //   4 = down walk, 5 = up walk, 6 = left walk, 7 = right walk
 static int playerFrameIdx(int dir, int walkFrame) {
     // dir 0=아래, 1=위, 2=왼, 3=오른
-    if (dir == 0) return walkFrame ? 4 : 0;
-    if (dir == 1) return walkFrame ? 5 : 1;
-    if (dir == 2) return walkFrame ? 6 : 2;
-    /* dir == 3 */ return walkFrame ? 7 : 3;
+    // pokered red.png 16×96 시트 layout (gen_sprites.py 미러링 후):
+    //   F0 = DOWN idle, F1 = UP idle, F2 = SIDE idle (LEFT 향함)
+    //   F3 = DOWN walk, F4 = UP walk, F5 = SIDE walk (LEFT 향함)
+    //   F6 = SIDE idle (RIGHT - mirrored), F7 = SIDE walk (RIGHT - mirrored)
+    if (dir == 0) return walkFrame ? 3 : 0;        // 아래
+    if (dir == 1) return walkFrame ? 4 : 1;        // 위
+    if (dir == 2) return walkFrame ? 5 : 2;        // 왼 (pokered 원본)
+    /* dir == 3 */ return walkFrame ? 7 : 6;       // 오른 (mirrored)
 }
 
 Overworld::Overworld(Renderer& r, Player& pl)
@@ -231,11 +258,15 @@ void Overworld::tryMove(int dx, int dy) {
     }
 
     // 맵 경계 이탈 → 인접 맵 이동 (즉시 워프, 애니메이션 없음)
+    // northEntryX/southEntryX = pokered connection offset (블록×2 스텝)
+    // dest_x = source_x + offset (너비가 다른 맵 간 정확한 위치 보존)
     if (ny < 0 && m->northMap >= 0) {
         MapDef* nm = getMap(m->northMap);
         if (nm) {
             state_.mapId = m->northMap;
-            state_.px = m->northEntryX;
+            state_.px = nx + m->northEntryX;
+            if (state_.px < 0) state_.px = 0;
+            if (state_.px >= nm->mapW) state_.px = nm->mapW - 1;
             state_.py = nm->mapH - 1;
             pl_.mapId = state_.mapId;
             pl_.x = state_.px; pl_.y = state_.py;
@@ -246,7 +277,9 @@ void Overworld::tryMove(int dx, int dy) {
         MapDef* sm = getMap(m->southMap);
         if (sm) {
             state_.mapId = m->southMap;
-            state_.px = m->southEntryX;
+            state_.px = nx + m->southEntryX;
+            if (state_.px < 0) state_.px = 0;
+            if (state_.px >= sm->mapW) state_.px = sm->mapW - 1;
             state_.py = 0;
             pl_.mapId = state_.mapId;
             pl_.x = state_.px; pl_.y = state_.py;
@@ -259,7 +292,41 @@ void Overworld::tryMove(int dx, int dy) {
     if (ny < 0 || ny >= m->mapH) return;
 
     char t = getTile(m, nx, ny);
-    if (!tileWalkable(t)) {
+    // 풀베기로 베어낸 'T' 나무는 빈 공간으로 처리 (walkable)
+    if (t == 'T' && isTreeCut(pl_, state_.mapId, nx, ny)) t = '!';
+
+    // 절벽 (ledge) jump-down: 남쪽 이동(dy>0)일 때 ledge tile 위로 + 한 칸 더 내려감
+    // v3 overworld의 ledge atoms (BL=0x36=54, 0x37=55): chars '0', '5', '6', '<'
+    //   '0' [44,44,55,55]  grass top + ledge bottom
+    //   '5' [57,57,54,55]  path top + ledge bottom (SW variant)
+    //   '6' [57,57,55,55]  path top + ledge bottom (SE variant)
+    //   '<' [44,44,55,52]  grass top + ledge-stair bottom (계단 좌측, 시각은 계단이지만 BL=55라 점프)
+    // ('9' [20,20,20,20] 는 ledge 아님 — 단순 path/dirt 타일)
+    // ('?' [44,44,60,60] BL=60=passable → 일반 walkable, ledge 아님)
+    bool isLedge = (state_.mapId >= 0 && state_.mapId <= 5 && state_.mapId != 4) &&
+                   (t == '0' || t == '5' || t == '6' || t == '<');
+    if (isLedge && dy > 0) {
+        // 점프: ny+1 까지 이동 (총 2칸)
+        int jy = ny + 1;
+        if (jy < m->mapH) {
+            char jt = getTile(m, nx, jy);
+            if (tileWalkable(jt, state_.mapId)) {
+                state_.stepDx = dx;
+                state_.stepDy = dy;
+                state_.px = nx;
+                state_.py = jy;
+                pl_.x = state_.px;
+                pl_.y = state_.py;
+                state_.dir = 0;
+                state_.moving = 8;  // animation frames
+                checkSpecialTiles(state_.px, state_.py);
+                checkWarps(state_.px, state_.py);
+                return;
+            }
+        }
+    }
+
+    if (!tileWalkable(t, state_.mapId)) {
         // 워프 트리거 char (player가 닿는 순간 워프):
         //   D=문 / L=lab door / C=player house 정문 / M=mart / G=gym
         //   p=R2F 사다리 / ? = OakLab 도어 / w=R1F→R2F 사다리 / j=R2F→R1F 사다리
@@ -297,34 +364,30 @@ void Overworld::checkWarps(int x, int y) {
     if (!m) return;
     char tile = getTile(m, x, y);
 
-    // 포켓몬센터 문 → 치료 이벤트 (실외 맵에서만; 실내의 'C'는 R1F 정문 같은 다른 용도)
-    if (tile == 'C' && !isIndoorMap(state_.mapId)) {
-        state_.pendingEvent = OwEvent::ENTER_POKEMON_CENTER;
-        return;
-    }
-    // 상록시티 마트 문 → 소포 이벤트
-    if (tile == 'M' && state_.mapId == MAP_VIRIDIAN && !pl_.deliveredParcel) {
-        state_.pendingEvent = OwEvent::ENTER_MART;
-        return;
-    }
+    // 'C' / 'M' 워프는 아래 WarpDef 로직으로 처리됨
+    // (PC: MAP_VIRIDIAN_PC/MAP_PEWTER_PC, Mart: MAP_VIRIDIAN_MART/MAP_PEWTER_MART)
+    // 소포 이벤트는 상록 마트 점원 NPC 와 대화로 처리 (trigger=3)
 
     for (int i = 0; i < m->numWarps; i++) {
         const WarpDef& w = m->warps[i];
         if (w.srcX == x && w.srcY == y) {
             MapDef* dest = getMap(w.destMap);
-            if (!dest) return;
-            state_.mapId = w.destMap;
-            // destX/destY == -1 이면 목적지 맵의 southEntry (기본 진입점) 사용
-            if (w.destX >= 0 && w.destY >= 0) {
-                state_.px = w.destX;
-                state_.py = w.destY;
-            } else {
-                state_.px = dest->southEntryX;
-                state_.py = dest->southEntryY;
+            if (!dest) {
+                // destMap == -1 (미구현 건물) → 잠긴 문 메시지
+                state_.dialog.active = true;
+                state_.dialog.npc = &_lockedDoorBuffer;
+                state_.dialog.lineIdx = 0;
+                return;
             }
-            pl_.mapId = state_.mapId;
-            pl_.x     = state_.px;
-            pl_.y     = state_.py;
+            // 페이드 트랜지션 시작 — 즉시 워프하지 않고 mid-fade에 실행
+            int dx = (w.destX >= 0 && w.destY >= 0) ? w.destX : dest->southEntryX;
+            int dy = (w.destX >= 0 && w.destY >= 0) ? w.destY : dest->southEntryY;
+            state_.warpFlashFrames = 12;
+            state_.pendingWarpMap  = w.destMap;
+            state_.pendingWarpX    = dx;
+            state_.pendingWarpY    = dy;
+            // 이동 중 애니메이션 강제 종료 (오버랩 방지)
+            state_.moving = 0;
             return;
         }
     }
@@ -383,8 +446,8 @@ bool Overworld::checkTrainerSight() {
         }
         if (inSight) {
             state_.eventData = i;
-            // 체육관 트레이너 index 2 이상 = 브록(BOSS)
-            if (state_.mapId == MAP_PEWTER_GYM && i >= 2) {
+            // isBoss=true 트레이너 = 체육관 관장 등 → BOSS_BATTLE
+            if (tr.isBoss) {
                 state_.pendingEvent = OwEvent::BOSS_BATTLE;
             } else {
                 state_.pendingEvent = OwEvent::TRAINER_BATTLE;
@@ -398,6 +461,22 @@ bool Overworld::checkTrainerSight() {
 // ─── 업데이트 ────────────────────────────────────────────────
 void Overworld::update(Key key) {
     state_.frame++;
+
+    // 워프 페이드 진행 — 12 → 0. mid-point (6)에서 실제 맵 전환.
+    if (state_.warpFlashFrames > 0) {
+        state_.warpFlashFrames--;
+        if (state_.warpFlashFrames == 6) {
+            // mid-fade — 실제 워프 실행
+            state_.mapId = state_.pendingWarpMap;
+            state_.px    = state_.pendingWarpX;
+            state_.py    = state_.pendingWarpY;
+            pl_.mapId    = state_.mapId;
+            pl_.x        = state_.px;
+            pl_.y        = state_.py;
+            // 도착 후 추가 워프 트리거(연쇄 워프) 방지 — 다음 이동 시점에 재계산
+        }
+        return;  // 페이드 중엔 다른 입력/이동 무시
+    }
 
     // cutscene 모드 — player 입력 차단, 자동 진행
     if (cutsceneActive()) {
@@ -442,6 +521,15 @@ void Overworld::update(Key key) {
                 if (npc->trigger == 1) {
                     state_.pendingEvent = OwEvent::STARTER_TRIGGER;
                 }
+                // 간호사 조이 → NURSE_HEAL
+                if (npc->trigger == 2) {
+                    state_.pendingEvent = OwEvent::NURSE_HEAL;
+                }
+                // 상록 마트 점원 → 소포 받음 (대화창 안에서 처리, 별도 씬 X)
+                if (npc->trigger == 3 && state_.mapId == MAP_VIRIDIAN_MART &&
+                    !pl_.deliveredParcel) {
+                    pl_.deliveredParcel = true;
+                }
 
                 // 상록시티 첫 NPC (소포 배달) 이벤트
                 if (state_.mapId == MAP_VIRIDIAN && npc->x == 3 && npc->y == 7) {
@@ -466,33 +554,69 @@ void Overworld::update(Key key) {
 
     // A키: 앞쪽 NPC/표지판과 상호작용
     if (key == Key::A) {
-        int fx = state_.px, fy = state_.py;
+        int dfx = 0, dfy = 0;
         switch (state_.dir) {
-            case 0: fy++; break;
-            case 1: fy--; break;
-            case 2: fx--; break;
-            case 3: fx++; break;
+            case 0: dfy =  1; break;  // 아래
+            case 1: dfy = -1; break;  // 위
+            case 2: dfx = -1; break;  // 왼쪽
+            case 3: dfx =  1; break;  // 오른쪽
         }
+        int fx = state_.px + dfx, fy = state_.py + dfy;
         MapDef* m = curMap();
         if (m) {
+            bool talked = false;
             for (int i = 0; i < m->numNpcs; i++) {
                 if (m->npcs[i].x == fx && m->npcs[i].y == fy) {
                     state_.dialog.active = true;
                     state_.dialog.npc = &m->npcs[i];
                     state_.dialog.lineIdx = 0;
+                    talked = true;
                     break;
                 }
             }
-            // 포켓몬센터 문에 A 누르면 치료
-            char ft = getTile(m, fx, fy);
-            if (ft == 'C') {
-                state_.pendingEvent = OwEvent::ENTER_POKEMON_CENTER;
+            // 카운터 너머 대화: 1칸 앞이 unwalkable 이면 2칸 앞 NPC 체크
+            // (pokered 의 talk-through-counter 동작 — 간호사 조이, 마트 점원 등)
+            if (!talked && !tileWalkable(getTile(m, fx, fy), state_.mapId)) {
+                int fx2 = fx + dfx, fy2 = fy + dfy;
+                for (int i = 0; i < m->numNpcs; i++) {
+                    if (m->npcs[i].x == fx2 && m->npcs[i].y == fy2) {
+                        state_.dialog.active = true;
+                        state_.dialog.npc = &m->npcs[i];
+                        state_.dialog.lineIdx = 0;
+                        talked = true;
+                        break;
+                    }
+                }
             }
-            // 마트 문
-            if (ft == 'M' && !pl_.deliveredParcel &&
-                state_.mapId == MAP_VIRIDIAN) {
-                state_.pendingEvent = OwEvent::ENTER_MART;
+            // 표지판 체크 — ALL_SIGNS 에서 (mapId, fx, fy) 일치하는 표지판 찾기
+            if (!talked) {
+                const SignDef* sign = findSign(state_.mapId, fx, fy);
+                if (sign) {
+                    for (int i = 0; i < 4; i++) _signBuffer.lines[i] = sign->lines[i];
+                    _signBuffer.trigger = 0;
+                    state_.dialog.active = true;
+                    state_.dialog.npc = &_signBuffer;
+                    state_.dialog.lineIdx = 0;
+                    talked = true;
+                }
             }
+            // 풀베기 나무 체크 — 'T' 타일 마주보고 A 누르면 처리
+            if (!talked) {
+                char ft = getTile(m, fx, fy);
+                if (ft == 'T' && !isTreeCut(pl_, state_.mapId, fx, fy)) {
+                    if (playerHasCut(pl_)) {
+                        addCutTree(pl_, state_.mapId, fx, fy);
+                        state_.dialog.active = true;
+                        state_.dialog.npc = &_cutTreeUsedBuffer;
+                        state_.dialog.lineIdx = 0;
+                    } else {
+                        state_.dialog.active = true;
+                        state_.dialog.npc = &_cutTreeNeedSkillBuffer;
+                        state_.dialog.lineIdx = 0;
+                    }
+                }
+            }
+            // 'C'/'M' 에 A 누르는 건 사인 보는 용도 (별도 처리 불필요 — 워프 시 자동)
         }
     }
 
@@ -525,6 +649,16 @@ void Overworld::renderKorean() {
 
     MapDef* m = curMap();
 
+    // 워프 페이드 중이면 검정 화면만 — 맵 렌더 스킵
+    if (state_.warpFlashFrames > 0) {
+        ren_.fillRect(0, 0, W, viewH, ' ',
+            std::string(Color::BG_BLACK) + Color::BLACK);
+        // 하단 박스는 유지
+        ren_.drawBox(0, boxY, W, 6, std::string(Color::BG_BLACK) + Color::WHITE);
+        ren_.fillRect(1, boxY+1, W-2, 4, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
+        return;
+    }
+
     // ── 실제 타일 아트 렌더링 (pokered 스프라이트 기반) ──────────
     // 타일 1개 = 4chars 너비 × 2행 (TILE_COLS=2 blocks × 2chars each, TILE_ROWS=2)
     // 화면에 보이는 타일 수: tilesX = W/4, tilesY = viewH/2
@@ -548,9 +682,13 @@ void Overworld::renderKorean() {
                 int  npcSpriteId = NPC_SPR_MOM;
                 int  trSpriteId  = NPC_SPR_GENTLEMAN;
                 bool offMap = false;
+                int  artMapId = state_.mapId;
 
                 if (m && mx >= 0 && mx < m->mapW && my >= 0 && my < m->mapH) {
                     tile_char = getTile(m, mx, my);
+                    // 풀베기로 베어낸 나무는 풀밭으로 렌더
+                    if (tile_char == 'T' && isTreeCut(pl_, state_.mapId, mx, my))
+                        tile_char = '!';
                     for (int i = 0; i < m->numNpcs; i++)
                         if (m->npcs[i].x == mx && m->npcs[i].y == my) {
                             isNpc = true;
@@ -564,6 +702,36 @@ void Overworld::renderKorean() {
                             trSpriteId = m->trainers[i].spriteId;
                             break;
                         }
+                } else if (m && !indoor && my < 0 && m->northMap >= 0) {
+                    // 북쪽 이웃 outdoor 맵 픽업 — pokered 식 seamless scroll
+                    MapDef* nm = getMap(m->northMap);
+                    if (nm && !isIndoorMap(nm->id)) {
+                        int nmx = mx + m->northEntryX;
+                        int nmy = nm->mapH + my;
+                        if (nmx >= 0 && nmx < nm->mapW && nmy >= 0 && nmy < nm->mapH) {
+                            tile_char = getTile(nm, nmx, nmy);
+                            artMapId = nm->id;
+                        } else {
+                            offMap = true;
+                        }
+                    } else {
+                        offMap = true;
+                    }
+                } else if (m && !indoor && my >= m->mapH && m->southMap >= 0) {
+                    // 남쪽 이웃 outdoor 맵
+                    MapDef* sm = getMap(m->southMap);
+                    if (sm && !isIndoorMap(sm->id)) {
+                        int smx = mx + m->southEntryX;
+                        int smy = my - m->mapH;
+                        if (smx >= 0 && smx < sm->mapW && smy >= 0 && smy < sm->mapH) {
+                            tile_char = getTile(sm, smx, smy);
+                            artMapId = sm->id;
+                        } else {
+                            offMap = true;
+                        }
+                    } else {
+                        offMap = true;
+                    }
                 } else {
                     offMap = true;
                 }
@@ -571,10 +739,13 @@ void Overworld::renderKorean() {
                 // 실내 맵의 외곽 영역은 그리지 않음 (clear()의 검정 배경 그대로)
                 if (offMap && indoor) continue;
 
+                // 실외 맵 off-map (이웃 없거나 범위 밖) → 트리
+                if (offMap && !indoor) tile_char = '$';
+
                 // 실내 맵: ' '(빈 칸) → 풀밭 대신 나무 바닥
                 if (indoor && tile_char == ' ') tile_char = 'f';
 
-                const TileArt* art = getTileArt(tile_char);
+                const TileArt* art = getTileArt(tile_char, artMapId);
 
                 // NPC/트레이너는 바탕 타일 위에 오버레이 (renderKorean에서 처리)
                 for (int r = 0; r < TILE_ROWS && sy + r < viewH; r++) {

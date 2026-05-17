@@ -8,6 +8,7 @@ enum class Key {
     B,       // X 키 - 취소
     START,   // Space / Enter - 메뉴
     ESCAPE,
+    WARP_MENU,   // Ctrl+M — 디버그 워프 메뉴
     UNKNOWN
 };
 

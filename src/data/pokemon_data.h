@@ -40,8 +40,9 @@ inline constexpr MoveData MOVES[] = {
     {15, L"할퀴기",      Type::NORMAL,   40, 100, 35, 0}, // Scratch
     {16, L"독침붕",      Type::POISON,   15, 100, 35, 0}, // Poison Sting
     {17, L"돌풍",        Type::NORMAL,   40, 100, 35, 0}, // Gust (Gen1: Normal타입)
+    {18, L"풀베기",      Type::NORMAL,   50,  95, 30, 0}, // Cut (HM01) - 풀숲/얇은나무 베기 필드기술
 };
-inline constexpr int NUM_MOVES_DATA = 18;
+inline constexpr int NUM_MOVES_DATA = 19;
 
 inline const MoveData& getMoveData(int id) {
     if (id > 0 && id < NUM_MOVES_DATA) return MOVES[id];
@@ -89,6 +90,9 @@ inline constexpr PokemonSpecies SPECIES[] = {
     // 뿔충이: Speed 50 (원작 수치), 독침붕+실뱉기 시작
     {13, L"뿔충이",   Type::BUG,      Type::POISON,  40,35,30,50,20, 52,
       {16,8,0,0}, {{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}} },
+    // 단데기 (Kakuna): 껍질굳히기만 (HP45 Def50)
+    {14, L"단데기",   Type::BUG,      Type::POISON,  45,25,50,35,25, 71,
+      {9,0,0,0}, {{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}} },
     // ── 브록 포켓몬 ───────────────────────────────────────────
     // 꼬마돌: Tackle만 시작, Lv11 돌던지기, Lv21 껍질굳히기
     {74, L"꼬마돌",   Type::ROCK,     Type::GROUND,  40,80,100,20,30, 86,
@@ -101,7 +105,7 @@ inline constexpr PokemonSpecies SPECIES[] = {
     {25, L"피카츄",   Type::ELECTRIC, Type::NONE,    35,55,30,90,50, 82,
       {13,2,0,0}, {{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}} },
 };
-inline constexpr int NUM_SPECIES_DATA = 11;
+inline constexpr int NUM_SPECIES_DATA = 12;
 
 inline const PokemonSpecies* getSpecies(int id) {
     for (int i = 0; i < NUM_SPECIES_DATA; i++)

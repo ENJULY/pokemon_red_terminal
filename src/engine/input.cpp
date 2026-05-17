@@ -60,5 +60,12 @@ Key Input::poll() {
     if (rec.EventType != KEY_EVENT) return Key::NONE;
     if (!rec.Event.KeyEvent.bKeyDown) return Key::NONE;
 
-    return vkToKey(rec.Event.KeyEvent.wVirtualKeyCode);
+    WORD vk = rec.Event.KeyEvent.wVirtualKeyCode;
+    DWORD ctrlState = rec.Event.KeyEvent.dwControlKeyState;
+    bool ctrl = (ctrlState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) != 0;
+
+    // Ctrl+M → 디버그 워프 메뉴
+    if (ctrl && vk == 'M') return Key::WARP_MENU;
+
+    return vkToKey(vk);
 }

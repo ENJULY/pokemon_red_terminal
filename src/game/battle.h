@@ -35,6 +35,7 @@ struct BattleState {
     int          enemyPartySize;
     const wchar_t* trainerName;
     const wchar_t* trainerPreText; // 배틀 전 대사
+    int            trainerIntroId; // 풀바디 스프라이트 ID (0=OAK,1=RIVAL,2=RED,3=BROCK,4=BUG_CATCHER,5=COOLTRAINER_M)
 
     int          playerPartyIdx; // 현재 내 포켓몬 인덱스
 
@@ -70,9 +71,10 @@ public:
 
     // 야생 배틀 시작
     void startWild(int speciesId, int level);
-    // 트레이너 배틀 시작
+    // 트레이너 배틀 시작 (introId=풀바디 스프라이트 인덱스, 기본 0=OAK)
     void startTrainer(const wchar_t* name, const wchar_t* preText,
-                      int* partyIds, int* partyLevels, int partySize);
+                      int* partyIds, int* partyLevels, int partySize,
+                      int introId = 0);
     // 보스(브록) 배틀
     void startBrock();
 

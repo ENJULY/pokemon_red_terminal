@@ -18,6 +18,7 @@ enum class OwEvent {
     STARTER_TRIGGER,  // 연구소 오박사 NPC 대화 끝 → 스타터 선택
     CUTSCENE_END_OAK, // 오박사 cutscene 끝 → 연구소 OW로 워프
     CUTSCENE_END_RIVAL, // 라이벌 cutscene 끝 → 라이벌 배틀
+    NURSE_HEAL,       // 간호사 조이 대화 끝 → 포켓몬 회복
 };
 
 // ─── OW cutscene (오박사/블루 인터럽트) ─────────────────────────
@@ -66,6 +67,12 @@ struct OwState {
     int     walkStep;       // 누적 걸음수 (포즈 토글용)
 
     OwCutscene cutscene;    // OW cutscene (오박사/블루 인터럽트)
+
+    // 워프 페이드 (건물 입구 등)
+    int  warpFlashFrames; // > 0이면 검정 페이드 중. 8 → 0
+    int  pendingWarpMap;  // 페이드 중간에 적용할 destMap
+    int  pendingWarpX;
+    int  pendingWarpY;
 };
 
 class Overworld {

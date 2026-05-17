@@ -11,6 +11,7 @@ from PIL import Image
 
 ROOT     = os.path.dirname(os.path.abspath(__file__))
 ASSETS   = os.path.normpath(os.path.join(ROOT, "..", "pokered_assets"))
+POKERED  = os.path.normpath(os.path.join(ROOT, "..", "..", "pokered"))
 OUT_PATH = os.path.normpath(os.path.join(ROOT, "..", "src", "data", "sprites.h"))
 
 # ─── 등장 포켓몬 ─────────────────────────────────────────────────
@@ -241,9 +242,12 @@ lines.append("}")
 INTRO_OUT_W = 56
 INTRO_OUT_H = 56
 INTRO_TARGETS = [
-    ("trainers/prof.oak", "OAK",   "오박사"),
-    ("trainers/rival1",   "RIVAL", "라이벌(블루)"),
-    ("player/red",        "RED",   "레드"),
+    ("trainers/prof.oak",     "OAK",          "오박사"),
+    ("trainers/rival1",       "RIVAL",        "라이벌(블루)"),
+    ("player/red",            "RED",          "레드"),
+    ("trainers/brock",        "BROCK",        "브록"),
+    ("trainers/bugcatcher",   "BUG_CATCHER",  "벌레잡이 소년"),
+    ("trainers/cooltrainerm", "COOLTRAINER_M","주니어 트레이너"),
 ]
 INTRO_PAL = (255, 250, 244, 232)  # 흰 → 옅은회 → 진회 → 검정
 
@@ -381,20 +385,51 @@ def load_red_from_sheet():
     return out
 
 def load_red_from_assets():
-    """폴백: pokered_assets/gfx/player/red.png 사용 (16x16 단일 프레임 가능)"""
-    p = os.path.join(ASSETS, "gfx/player/red.png")
-    if not os.path.exists(p):
-        return None
-    try:
-        return Image.open(p).convert("L")
-    except Exception:
-        return None
+    """폴백: 오버월드 스프라이트 (16x96 = 6 프레임). 잘못된 56x56 intro 스프라이트 차단."""
+    # 1순위: pokered_assets/gfx/sprites/red.png (16x96 OW 스프라이트)
+    # 2순위: ../pokered/gfx/sprites/red.png (원본)
+    candidates = [
+        os.path.join(ASSETS, "gfx/sprites/red.png"),
+        os.path.join(POKERED, "gfx/sprites/red.png"),
+    ]
+    for p in candidates:
+        if not os.path.exists(p):
+            continue
+        try:
+            img = Image.open(p).convert("L")
+            # 16x16 단일 프레임이거나 16x96 시트 (overworld)
+            if img.size[0] == 16 and img.size[1] % 16 == 0 and img.size[1] <= 96:
+                return img
+        except Exception:
+            pass
+    return None
+
+def convert_ow_player_frame_mirrored(img, frame_idx):
+    """pokered frame 2/5는 LEFT 향함. 오른쪽 방향용 미러 프레임 생성."""
+    base_y = frame_idx * 16
+    rows = []
+    for hy in range(8):
+        py_top = base_y + hy * 2
+        py_bot = py_top + 1
+        row = ""
+        for x in range(16):
+            # 좌우 미러링: x' = 15 - x
+            mx = 15 - x
+            t = img.getpixel((mx, py_top))
+            b = img.getpixel((mx, py_bot))
+            row += ow_cell(ow_classify(t), ow_classify(b))
+        rows.append(row)
+    return rows
 
 print("\n오버월드 플레이어 스프라이트...")
 img = load_red_from_sheet() or load_red_from_assets()
 if img is not None:
-    n_frames = max(1, img.size[1] // 16)
-    print(f"  Red 시트 로드: {img.size} → {n_frames} frames")
+    base_n = max(1, img.size[1] // 16)
+    # 6-frame 시트면 RIGHT 방향용 미러 2개 (frame 2 → 6, frame 5 → 7) 추가
+    has_side = (base_n >= 6)
+    extra = 2 if has_side else 0
+    n_frames = base_n + extra
+    print(f"  Red 시트 로드: {img.size} → {base_n} frames (+{extra} mirrored = {n_frames})")
     lines.append("")
     lines.append("// ─── 오버월드 플레이어 스프라이트 (16 chars × 8 rows) ─────")
     lines.append(f"static const int OW_PLAYER_W = 16;")
@@ -403,10 +438,28 @@ if img is not None:
     lines.append("")
     lines.append("struct OwPlayerFrame { const char* rows[8]; };")
     lines.append("")
+    lines.append("// pokered red.png 16×96 시트 layout:")
+    lines.append("//   F0 = DOWN idle, F1 = UP idle, F2 = SIDE idle (LEFT 향함)")
+    lines.append("//   F3 = DOWN walk, F4 = UP walk, F5 = SIDE walk (LEFT 향함)")
+    lines.append("//   F6 = SIDE idle (RIGHT - mirrored F2), F7 = SIDE walk (RIGHT - mirrored F5)")
+    lines.append("")
     lines.append(f"static const OwPlayerFrame OW_PLAYER_RED[{n_frames}] = {{")
-    for fi in range(n_frames):
+    for fi in range(base_n):
         rows = convert_ow_player_frame(img, fi)
         lines.append(f"    {{{{   // frame {fi}")
+        for r in rows:
+            lines.append(f'        "{escape_c(r)}",')
+        lines.append("    }},")
+    if has_side:
+        # frame 6 = mirrored frame 2 (RIGHT idle)
+        rows = convert_ow_player_frame_mirrored(img, 2)
+        lines.append(f"    {{{{   // frame 6 (mirrored frame 2 - RIGHT idle)")
+        for r in rows:
+            lines.append(f'        "{escape_c(r)}",')
+        lines.append("    }},")
+        # frame 7 = mirrored frame 5 (RIGHT walk)
+        rows = convert_ow_player_frame_mirrored(img, 5)
+        lines.append(f"    {{{{   // frame 7 (mirrored frame 5 - RIGHT walk)")
         for r in rows:
             lines.append(f'        "{escape_c(r)}",')
         lines.append("    }},")
