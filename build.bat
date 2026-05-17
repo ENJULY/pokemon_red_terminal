@@ -10,35 +10,30 @@ REM  - Builds and launches the game in one step
 REM ============================================================
 
 REM ====== Locate g++ ======
-REM 1) Try PATH first
+REM 1) Try modern MinGW-w64 install locations FIRST (PATH may have an old GCC)
+REM    C++17 inline variables require g++ 7.0+
 set "GXX="
+for %%P in (
+    "C:\mingw64\bin\g++.exe"
+    "C:\msys64\ucrt64\bin\g++.exe"
+    "C:\msys64\mingw64\bin\g++.exe"
+    "C:\Program Files\mingw64\bin\g++.exe"
+    "C:\Program Files (x86)\mingw64\bin\g++.exe"
+    "%LOCALAPPDATA%\Programs\mingw64\bin\g++.exe"
+) do (
+    if exist %%~P (
+        set "GXX=%%~P"
+        REM Prepend g++ directory to PATH so runtime DLLs are found
+        set "PATH=%%~dpP;!PATH!"
+        goto :found
+    )
+)
+
+REM 2) Fall back to PATH
 where g++ >nul 2>&1
 if %errorlevel% equ 0 (
     set "GXX=g++"
     goto :found
-)
-
-REM 2a) Check for g++ (MinGW) via PATH (preferred)
-where g++ >nul 2>&1
-if %errorlevel% equ 0 (
-    set "COMPILER_TYPE=GCC"
-    set "COMPILER_PATH=g++"
-    goto :compiler_found
-)
-
-REM 2b) Fallback: Check common MinGW install locations (extended)
-for %%P in (
-    "C:\msys64\ucrt64\bin\g++.exe"
-    "C:\msys64\mingw64\bin\g++.exe"
-    "C:\msys64\clang64\bin\g++.exe"
-    "C:\mingw64\bin\g++.exe"
-) do (
-    if exist %%~P (
-        set "COMPILER_TYPE=GCC"
-        set "COMPILER_PATH=%%~P"
-        set "PATH=%%~dpP;!PATH!"
-        goto :compiler_found
-    )
 )
 
 echo [ERROR] g++.exe not found.
