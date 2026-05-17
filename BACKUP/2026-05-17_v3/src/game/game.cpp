@@ -360,20 +360,6 @@ void Game::updateWarpMenu(Key key) {
         player_.mapId = w.mapId;
         player_.x = w.x;
         player_.y = w.y;
-
-        // 디버그 편의: 풀베기 가능한 포켓몬 없으면 더미 1마리 자동 지급
-        // (이미 풀베기를 아는 포켓몬이 파티에 있으면 추가 안 함)
-        if (!playerHasCut(player_) && player_.partySize < 6) {
-            Pokemon dummy = makePokemon(1, 10);  // 이상해씨 L10 (풀 타입 → 풀베기 자연스러움)
-            if (dummy.species) {
-                // 첫 번째 기술 슬롯을 풀베기로 강제 교체
-                dummy.moves[0].moveId = MOVE_CUT;
-                dummy.moves[0].pp     = getMoveData(MOVE_CUT).maxPP;
-                if (dummy.numMoves < 1) dummy.numMoves = 1;
-                player_.party[player_.partySize++] = dummy;
-            }
-        }
-
         if (ow_) ow_->init();
         changeScene(Scene::OVERWORLD);
     } else if (key == Key::B || key == Key::ESCAPE) {

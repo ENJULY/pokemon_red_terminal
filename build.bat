@@ -1,63 +1,106 @@
 @echo off
+chcp 65001 >nul 2>&1
 cd /d "%~dp0"
-setlocal
+setlocal EnableDelayedExpansion
 
-:: ====== MinGW 경로 ======
-set MGW=C:\mingw64
-set GXX=%MGW%\bin\g++.exe
-set MGW_LIBEXEC=%MGW%\libexec\gcc\x86_64-w64-mingw32\15.1.0\
-set MGW_TLIB=%MGW%\x86_64-w64-mingw32\lib\
+REM ============================================================
+REM  Pokemon Red - Terminal Edition Build Script
+REM  - Auto-detects g++ from PATH or common MinGW install locations
+REM  - Builds and launches the game in one step
+REM ============================================================
 
-:: 깨진 C:\MinGW (구 6.3.0) 우선 차단 — 새 mingw64를 PATH 맨 앞으로
-set PATH=%MGW%\bin;%PATH%
-
-if not exist "%GXX%" (
-    echo [ERROR] %GXX% not found
-    pause
-    exit /b 1
+REM ====== Locate g++ ======
+REM 1) Try PATH first
+set "GXX="
+where g++ >nul 2>&1
+if %errorlevel% equ 0 (
+    set "GXX=g++"
+    goto :found
 )
 
+REM 2) Try common MinGW-w64 install locations
+for %%P in (
+    "C:\mingw64\bin\g++.exe"
+    "C:\msys64\mingw64\bin\g++.exe"
+    "C:\msys64\ucrt64\bin\g++.exe"
+    "C:\MinGW\bin\g++.exe"
+    "C:\Program Files\mingw64\bin\g++.exe"
+    "C:\Program Files (x86)\mingw64\bin\g++.exe"
+    "%LOCALAPPDATA%\Programs\mingw64\bin\g++.exe"
+) do (
+    if exist %%~P (
+        set "GXX=%%~P"
+        REM Prepend g++ directory to PATH so runtime DLLs are found
+        set "PATH=%%~dpP;!PATH!"
+        goto :found
+    )
+)
+
+echo [ERROR] g++.exe not found.
+echo.
+echo Please install MinGW-w64:
+echo   - https://www.msys2.org/    (MSYS2 - recommended)
+echo   - https://winlibs.com/      (Portable)
+echo.
+echo After install, either:
+echo   1) Add the bin directory to PATH environment variable
+echo      (e.g. C:\mingw64\bin)
+echo   2) Or extract to C:\mingw64
+echo.
+pause
+exit /b 1
+
+:found
 echo ============================================
 echo  PokemonRed - Build
 echo ============================================
 echo Compiler: %GXX%
 "%GXX%" --version | findstr /i "g++"
 
-:: 실행 중인 게임 종료 (exe 잠금 방지)
-taskkill /F /IM PokemonRed.exe 2>nul
+REM Kill any running game instance to release the exe file lock
+taskkill /F /IM PokemonRed.exe >nul 2>&1
 
 if not exist build mkdir build
 
 echo.
 echo Compiling...
-"%GXX%" -std=c++17 -B"%MGW_LIBEXEC%" -B"%MGW_TLIB%" src\main.cpp src\engine\renderer.cpp src\engine\input.cpp src\engine\audio.cpp src\game\game.cpp src\game\battle.cpp src\game\overworld.cpp -o build\PokemonRed.exe -lwinmm -I src -mconsole -DUNICODE -D_UNICODE -static -static-libgcc -static-libstdc++
-set BUILDRC=%errorlevel%
+"%GXX%" -std=c++17 ^
+    src\main.cpp ^
+    src\engine\renderer.cpp src\engine\input.cpp src\engine\audio.cpp ^
+    src\game\game.cpp src\game\battle.cpp src\game\overworld.cpp ^
+    -o build\PokemonRed.exe ^
+    -lwinmm -I src ^
+    -mconsole -DUNICODE -D_UNICODE ^
+    -static -static-libgcc -static-libstdc++
 
-echo.
-echo Compiler exit code: %BUILDRC%
+set BUILDRC=%errorlevel%
 
 if %BUILDRC% neq 0 (
     echo.
-    echo [FAILED] Build failed
+    echo [FAILED] Build failed, exit code %BUILDRC%
     pause
     exit /b 1
 )
 
 if not exist build\PokemonRed.exe (
-    echo [FAILED] exe not produced
+    echo [FAILED] PokemonRed.exe was not produced
     pause
     exit /b 1
 )
 
-:: DLL 백업 복사 (정적 링크 실패 시 대비)
-if exist "%MGW%\bin\libwinpthread-1.dll" copy /Y "%MGW%\bin\libwinpthread-1.dll" build\ >nul
-if exist "%MGW%\bin\libgcc_s_seh-1.dll"  copy /Y "%MGW%\bin\libgcc_s_seh-1.dll"  build\ >nul
-if exist "%MGW%\bin\libstdc++-6.dll"     copy /Y "%MGW%\bin\libstdc++-6.dll"     build\ >nul
+REM Copy runtime DLLs as fallback (in case -static linking fails)
+for %%D in (libwinpthread-1.dll libgcc_s_seh-1.dll libstdc++-6.dll) do (
+    for /f "delims=" %%F in ('where %%D 2^>nul') do (
+        if not exist "build\%%D" copy /Y "%%F" build\ >nul 2>&1
+    )
+)
 
 echo.
 echo [OK] Build succeeded
-echo Running...
-build\PokemonRed.exe
+echo ============================================
+echo  Launching game...
+echo ============================================
 echo.
-echo Game exit code: %errorlevel%
-pause
+
+REM Launch the game. Window closes automatically when game exits.
+build\PokemonRed.exe

@@ -52,48 +52,7 @@ struct Player {
 
     // 인트로 직후 침실에서 깨어나는 시퀀스 트리거
     bool justWokeUp;
-
-    // 풀베기로 베어낸 나무 위치 기록 (최대 16개) — 게임 재시작 시 리셋됨
-    static constexpr int MAX_CUT_TREES = 16;
-    int  cutTreeMapId[MAX_CUT_TREES];
-    int  cutTreeX[MAX_CUT_TREES];
-    int  cutTreeY[MAX_CUT_TREES];
-    int  cutTreeCount;
 };
-
-// 풀베기(Cut) move ID 상수
-static constexpr int MOVE_CUT = 18;
-
-// 파티에 풀베기를 아는 포켓몬이 있는지 확인
-inline bool playerHasCut(const Player& pl) {
-    for (int i = 0; i < pl.partySize; i++) {
-        const Pokemon& p = pl.party[i];
-        if (!p.species) continue;
-        for (int j = 0; j < p.numMoves; j++) {
-            if (p.moves[j].moveId == MOVE_CUT) return true;
-        }
-    }
-    return false;
-}
-
-// (mapId, x, y) 위치의 풀베기 나무가 이미 베어졌는지 확인
-inline bool isTreeCut(const Player& pl, int mapId, int x, int y) {
-    for (int i = 0; i < pl.cutTreeCount; i++) {
-        if (pl.cutTreeMapId[i] == mapId && pl.cutTreeX[i] == x && pl.cutTreeY[i] == y)
-            return true;
-    }
-    return false;
-}
-
-// 베어낸 나무 위치 등록
-inline bool addCutTree(Player& pl, int mapId, int x, int y) {
-    if (pl.cutTreeCount >= Player::MAX_CUT_TREES) return false;
-    pl.cutTreeMapId[pl.cutTreeCount] = mapId;
-    pl.cutTreeX[pl.cutTreeCount] = x;
-    pl.cutTreeY[pl.cutTreeCount] = y;
-    pl.cutTreeCount++;
-    return true;
-}
 
 // ─── 포켓몬 생성 ─────────────────────────────────────────────
 inline void recalcStats(Pokemon& p) {

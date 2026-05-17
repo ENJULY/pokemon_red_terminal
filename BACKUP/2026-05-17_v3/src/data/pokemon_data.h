@@ -40,9 +40,8 @@ inline constexpr MoveData MOVES[] = {
     {15, L"할퀴기",      Type::NORMAL,   40, 100, 35, 0}, // Scratch
     {16, L"독침붕",      Type::POISON,   15, 100, 35, 0}, // Poison Sting
     {17, L"돌풍",        Type::NORMAL,   40, 100, 35, 0}, // Gust (Gen1: Normal타입)
-    {18, L"풀베기",      Type::NORMAL,   50,  95, 30, 0}, // Cut (HM01) - 풀숲/얇은나무 베기 필드기술
 };
-inline constexpr int NUM_MOVES_DATA = 19;
+inline constexpr int NUM_MOVES_DATA = 18;
 
 inline const MoveData& getMoveData(int id) {
     if (id > 0 && id < NUM_MOVES_DATA) return MOVES[id];

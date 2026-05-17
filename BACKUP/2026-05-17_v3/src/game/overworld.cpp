@@ -8,42 +8,18 @@
 #define swprintf _snwprintf
 #endif
 
-// ─── 임시 NpcDef 버퍼 (표지판/잠긴 도어 / 풀베기 메시지용) ─────
-// 표지판/잠긴문/풀베기는 NPC가 아니지만 dialog 시스템을 재활용하기 위해 NpcDef 형태로 wrap.
-static NpcDef _signBuffer;
-static NpcDef _lockedDoorBuffer = {
-    0, 0,
-    { L"문이 잠겨있다...", nullptr, nullptr, nullptr },
-    0, 0
-};
-static NpcDef _cutTreeNeedSkillBuffer = {
-    0, 0,
-    { L"이 나무는 풀베기로 베어낼 수 있을 것 같다.",
-      L"포켓몬에게 풀베기를 가르쳐야 한다.",
-      nullptr, nullptr },
-    0, 0
-};
-static NpcDef _cutTreeUsedBuffer = {
-    0, 0,
-    { L"포켓몬이 풀베기를 사용했다!",
-      L"나무가 베어졌다.",
-      nullptr, nullptr },
-    0, 0
-};
-
 // ─── 주인공 GB 도트 스프라이트 매핑 (8 프레임, 4방향 × idle/walk) ─────
 //   0 = down idle, 1 = up idle, 2 = left idle, 3 = right idle
 //   4 = down walk, 5 = up walk, 6 = left walk, 7 = right walk
 static int playerFrameIdx(int dir, int walkFrame) {
     // dir 0=아래, 1=위, 2=왼, 3=오른
-    // pokered red.png 16×96 시트 layout (gen_sprites.py 미러링 후):
-    //   F0 = DOWN idle, F1 = UP idle, F2 = SIDE idle (LEFT 향함)
-    //   F3 = DOWN walk, F4 = UP walk, F5 = SIDE walk (LEFT 향함)
-    //   F6 = SIDE idle (RIGHT - mirrored), F7 = SIDE walk (RIGHT - mirrored)
-    if (dir == 0) return walkFrame ? 3 : 0;        // 아래
-    if (dir == 1) return walkFrame ? 4 : 1;        // 위
-    if (dir == 2) return walkFrame ? 5 : 2;        // 왼 (pokered 원본)
-    /* dir == 3 */ return walkFrame ? 7 : 6;       // 오른 (mirrored)
+    // pokered red.png 16×96 시트 = 6 frames:
+    //   0=down-idle, 1=down-walk, 2=up-idle, 3=up-walk, 4=side-idle, 5=side-walk
+    // (좌/우 동일 프레임 사용 — 미러링 미구현)
+    if (dir == 0) return walkFrame ? 1 : 0;
+    if (dir == 1) return walkFrame ? 3 : 2;
+    /* dir 2 (왼) 또는 dir 3 (오른) */
+    return walkFrame ? 5 : 4;
 }
 
 Overworld::Overworld(Renderer& r, Player& pl)
@@ -292,8 +268,6 @@ void Overworld::tryMove(int dx, int dy) {
     if (ny < 0 || ny >= m->mapH) return;
 
     char t = getTile(m, nx, ny);
-    // 풀베기로 베어낸 'T' 나무는 빈 공간으로 처리 (walkable)
-    if (t == 'T' && isTreeCut(pl_, state_.mapId, nx, ny)) t = '!';
 
     // 절벽 (ledge) jump-down: 남쪽 이동(dy>0)일 때 ledge tile 위로 + 한 칸 더 내려감
     // v3 overworld의 ledge atoms (BL=0x36=54, 0x37=55): chars '0', '5', '6', '<'
@@ -372,13 +346,7 @@ void Overworld::checkWarps(int x, int y) {
         const WarpDef& w = m->warps[i];
         if (w.srcX == x && w.srcY == y) {
             MapDef* dest = getMap(w.destMap);
-            if (!dest) {
-                // destMap == -1 (미구현 건물) → 잠긴 문 메시지
-                state_.dialog.active = true;
-                state_.dialog.npc = &_lockedDoorBuffer;
-                state_.dialog.lineIdx = 0;
-                return;
-            }
+            if (!dest) return;
             // 페이드 트랜지션 시작 — 즉시 워프하지 않고 mid-fade에 실행
             int dx = (w.destX >= 0 && w.destY >= 0) ? w.destX : dest->southEntryX;
             int dy = (w.destX >= 0 && w.destY >= 0) ? w.destY : dest->southEntryY;
@@ -583,40 +551,12 @@ void Overworld::update(Key key) {
                         state_.dialog.active = true;
                         state_.dialog.npc = &m->npcs[i];
                         state_.dialog.lineIdx = 0;
-                        talked = true;
                         break;
                     }
                 }
             }
-            // 표지판 체크 — ALL_SIGNS 에서 (mapId, fx, fy) 일치하는 표지판 찾기
-            if (!talked) {
-                const SignDef* sign = findSign(state_.mapId, fx, fy);
-                if (sign) {
-                    for (int i = 0; i < 4; i++) _signBuffer.lines[i] = sign->lines[i];
-                    _signBuffer.trigger = 0;
-                    state_.dialog.active = true;
-                    state_.dialog.npc = &_signBuffer;
-                    state_.dialog.lineIdx = 0;
-                    talked = true;
-                }
-            }
-            // 풀베기 나무 체크 — 'T' 타일 마주보고 A 누르면 처리
-            if (!talked) {
-                char ft = getTile(m, fx, fy);
-                if (ft == 'T' && !isTreeCut(pl_, state_.mapId, fx, fy)) {
-                    if (playerHasCut(pl_)) {
-                        addCutTree(pl_, state_.mapId, fx, fy);
-                        state_.dialog.active = true;
-                        state_.dialog.npc = &_cutTreeUsedBuffer;
-                        state_.dialog.lineIdx = 0;
-                    } else {
-                        state_.dialog.active = true;
-                        state_.dialog.npc = &_cutTreeNeedSkillBuffer;
-                        state_.dialog.lineIdx = 0;
-                    }
-                }
-            }
             // 'C'/'M' 에 A 누르는 건 사인 보는 용도 (별도 처리 불필요 — 워프 시 자동)
+            // 소포 이벤트는 마트 내부 점원 NPC 로 이동
         }
     }
 
@@ -686,9 +626,6 @@ void Overworld::renderKorean() {
 
                 if (m && mx >= 0 && mx < m->mapW && my >= 0 && my < m->mapH) {
                     tile_char = getTile(m, mx, my);
-                    // 풀베기로 베어낸 나무는 풀밭으로 렌더
-                    if (tile_char == 'T' && isTreeCut(pl_, state_.mapId, mx, my))
-                        tile_char = '!';
                     for (int i = 0; i < m->numNpcs; i++)
                         if (m->npcs[i].x == mx && m->npcs[i].y == my) {
                             isNpc = true;

@@ -347,17 +347,9 @@ inline MapDef MAP_3 = {
         "$$$$$$/&&($$$$$$$$$$",
         nullptr
     },
-    {
-        // 디그다 동굴 입구 차단 NPC — (12, 9) 워프 자리에 배치해서 진입 차단
-        {12, 9, {
-            L"연구원: 안쪽은 위험한 디그다가 많아!",
-            L"지금은 들어갈 수 없어. 다음에 다시 와줘.",
-            nullptr
-        }, NPC_SPR_GENTLEMAN},
-    }, 1,  // npcs
+    {}, 0,  // npcs
     {}, 0,  // trainers
     {
-        // 디그다 동굴 입구 (NPC가 차단 중이지만 워프는 유지 — 추후 NPC 제거 시 복구)
         {12, 9, -1  /*DIGLETTS_CAVE_ROUTE_2*/, -1, -1},
         // Forest 북쪽 게이트 입구 (3,11) → MAP_16 위쪽 (5,0)
         {3, 11, MAP_FOREST_NORTH_GATE, 5, 0},
@@ -480,10 +472,10 @@ inline MapDef MAP_5 = {
         "***1&(&(&(&(&(&(&(&(!!!!!!!!_D:`&(A*****",
         "***1(&!!!!(&b2222c(&(&J22K(&(&(&(&A*****",
         "***1&(!!!!&(d3333e&(&(Q33U&(&(&(&(j77777",
-        "***1(&!!!!%%f^st^S(&!!BNNE!!!!!!(&(&1!!!",
-        "***1&(!!!!%=g:::GP&(!!FMRI!!!!!!&(&(1!!!",
-        "***1(&(&(&(&(&(&(&/&(&(&(&(&(&(&%%(&1!!!",
-        "***1&(&(&(&(&(&(&(/&&(&(&(&(&(&(%=&(1!!!",
+        "***1(&!!!!%%f^st^S(&!!BNNE!!!!!!(&(&(&(&",
+        "***1&(!!!!%=g:::GP&(!!FMRI!!!!!!&(&(&(&(",
+        "***1(&(&(&(&(&(&(&/&(&(&(&(&(&(&%%(&(&(&",
+        "***1&(&(&(&(&(&(&(/&&(&(&(&(&(&(%=&(&(&(",
         "***1(&!!!!(&!!!!!!/&!!!!!!!!!!!!(&i88888",
         "***1$$$$$$$$$$$$$$/&!!!!!!!!!!!!&(A*****",
         "***1(&(&(&(&J22K(&(&%%%%%%%%%%%%(&A*****",
@@ -679,7 +671,7 @@ inline MapDef MAP_8 = {
         "!!!&!!&!!!",
         "!!!!!!!!!!",
         "!!!!!!!!!!",
-        "!!!!?\?!!!!",  // ?\?: 트라이그래프 회피 (??! → |)
+        "!!!!??!!!!",
         nullptr
     },
     {}, 0,  // npcs
@@ -903,7 +895,14 @@ inline MapDef MAP_15 = {
         "&!!!**!!!&",
         nullptr
     },
-    {}, 0,  // npcs (Route 2 Gate 보조원 NPC 제거됨)
+    {
+        // 오박사 보조원 (1,4) facing LEFT — pokered Route2Gate_Object.asm
+        {1, 4, {
+            L"보조원: 어서오세요, 2번도로 게이트입니다!",
+            L"오박사님 심부름 잘 마쳤나요?",
+            nullptr
+        }, NPC_SPR_OAK, 0},
+    }, 1,  // npcs
     {}, 0,  // trainers
     {
         // 위 출구 (4,0)(5,0) → Route 2 (16,35) [게이트 북쪽 입구의 도착지]
@@ -1013,173 +1012,6 @@ inline constexpr int NUM_MAPS = 18;
 
 inline MapDef* getMap(int id) {
     if (id >= 0 && id < NUM_MAPS) return ALL_MAPS[id];
-    return nullptr;
-}
-
-// ─── 표지판 (Signs) ───────────────────────────────────────────
-// 플레이어가 표지판 칸을 마주보고 A 누르면 내용을 보여줌.
-// pokered bg_event 와 동일 위치 (또는 비슷한 위치)에 배치.
-struct SignDef {
-    int mapId;
-    int x, y;
-    const wchar_t* lines[4];  // 최대 3줄 + nullptr
-};
-
-static const SignDef ALL_SIGNS[] = {
-    // ─── 팔레트시티 (MAP_0) — '=' 표지판 타일 4개 ───────────────
-    {MAP_PALLET, 3, 5, {
-        L"주인공의 집",
-        nullptr
-    }},
-    {MAP_PALLET, 11, 5, {
-        L"라이벌의 집",
-        nullptr
-    }},
-    {MAP_PALLET, 7, 9, {
-        L"오박사 포켓몬 연구소",
-        nullptr
-    }},
-    {MAP_PALLET, 13, 13, {
-        L"팔레트시티",
-        L"\"영원한 푸르름의 마을\"",
-        nullptr
-    }},
-
-    // ─── 1번도로 (MAP_1) — '=' 1개 ──────────────────────────────
-    {MAP_ROUTE1, 9, 27, {
-        L"1번도로",
-        L"북쪽 → 상록시티",
-        nullptr
-    }},
-
-    // ─── 상록시티 (MAP_2) — 'S/R/O/=' 표지판 7개 ────────────────
-    {MAP_VIRIDIAN, 19, 1, {
-        L"북쪽 → 2번도로 / 회색시티",
-        nullptr
-    }},
-    {MAP_VIRIDIAN, 33, 6, {
-        L"상록시티 체육관",
-        L"관장이 부재중입니다.",
-        nullptr
-    }},
-    {MAP_VIRIDIAN, 27, 7, {
-        L"상록시티",
-        L"\"영원한 매혹의 마을\"",
-        nullptr
-    }},
-    {MAP_VIRIDIAN, 17, 17, {
-        L"← 22번도로 (공사중)",
-        nullptr
-    }},
-    {MAP_VIRIDIAN, 30, 19, {
-        L"포켓몬마트",
-        L"포켓몬 도구 판매",
-        nullptr
-    }},
-    {MAP_VIRIDIAN, 24, 25, {
-        L"포켓몬센터",
-        L"포켓몬을 회복시켜드립니다",
-        nullptr
-    }},
-    {MAP_VIRIDIAN, 21, 29, {
-        L"남쪽 → 1번도로 / 팔레트시티",
-        nullptr
-    }},
-
-    // ─── 2번도로 (MAP_3) — '=' 2개 ──────────────────────────────
-    {MAP_ROUTE2, 11, 11, {
-        L"2번도로 (북쪽)",
-        L"북쪽 → 회색시티",
-        nullptr
-    }},
-    {MAP_ROUTE2, 5, 65, {
-        L"2번도로 (남쪽)",
-        L"남쪽 → 상록시티",
-        nullptr
-    }},
-
-    // ─── 상록숲 (MAP_4) — '+' 표지판 타일 6개 ───────────────────
-    {MAP_VIR_FOREST, 2, 1, {
-        L"← 상록숲 출구 (북쪽 게이트)",
-        L"회색시티 방향",
-        nullptr
-    }},
-    {MAP_VIR_FOREST, 26, 17, {
-        L"트레이너 팁:",
-        L"여기저기 둘러봐야 다양한 포켓몬을",
-        L"만날 수 있어요!",
-        nullptr
-    }},
-    {MAP_VIR_FOREST, 4, 24, {
-        L"트레이너 팁:",
-        L"풀숲에서는 야생 포켓몬이 나옵니다.",
-        nullptr
-    }},
-    {MAP_VIR_FOREST, 16, 32, {
-        L"독에 걸렸을 땐 안티독트!",
-        L"포켓몬마트에서 구입 가능.",
-        nullptr
-    }},
-    {MAP_VIR_FOREST, 24, 40, {
-        L"트레이너 팁:",
-        L"숲은 자연이 만든 미로입니다.",
-        nullptr
-    }},
-    {MAP_VIR_FOREST, 18, 45, {
-        L"← 상록숲 출구 (남쪽 게이트)",
-        L"2번도로 방향",
-        nullptr
-    }},
-
-    // ─── 회색시티 (MAP_5) — 'S/R/O/=' 표지판 8개 ────────────────
-    {MAP_PEWTER, 15, 9, {
-        L"회색시티 과학박물관",
-        L"고대 포켓몬의 화석을 전시 중.",
-        nullptr
-    }},
-    {MAP_PEWTER, 17, 16, {
-        L"회색시티 체육관",
-        L"관장: 브록 — 바위 포켓몬 전문",
-        nullptr
-    }},
-    {MAP_PEWTER, 11, 17, {
-        L"회색시티",
-        L"\"돌과 함께 사는 마을\"",
-        nullptr
-    }},
-    {MAP_PEWTER, 24, 17, {
-        L"포켓몬마트",
-        L"포켓몬 도구 판매",
-        nullptr
-    }},
-    {MAP_PEWTER, 33, 19, {
-        L"3번도로 → (공사중)",
-        nullptr
-    }},
-    {MAP_PEWTER, 25, 23, {
-        L"회색시티 안내판",
-        L"남쪽으로 가면 상록숲입니다.",
-        nullptr
-    }},
-    {MAP_PEWTER, 14, 25, {
-        L"포켓몬센터",
-        L"포켓몬을 회복시켜드립니다",
-        nullptr
-    }},
-    {MAP_PEWTER, 19, 29, {
-        L"남쪽 → 2번도로 / 상록시티",
-        nullptr
-    }},
-};
-static const int NUM_SIGNS = sizeof(ALL_SIGNS) / sizeof(ALL_SIGNS[0]);
-
-inline const SignDef* findSign(int mapId, int x, int y) {
-    for (int i = 0; i < NUM_SIGNS; i++) {
-        if (ALL_SIGNS[i].mapId == mapId &&
-            ALL_SIGNS[i].x == x && ALL_SIGNS[i].y == y) {
-            return &ALL_SIGNS[i];
-        }
-    }
     return nullptr;
 }
 

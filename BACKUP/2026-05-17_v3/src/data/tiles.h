@@ -3136,12 +3136,11 @@ inline const TileArt* getTileArt(char c, int mapId = 0) {
     if (mapId == 4) {
         switch (c) {
         case '!': return &TILE_FR_C033;
-        // 나무 타일들은 OW3 (다른 맵과 동일 스타일) 사용 — Forest 작은 stump 시각 폐기
-        case '$': return &TILE_OW3_C036;
-        case '%': return &TILE_OW3_C036;
-        case '&': return &TILE_OW3_C036;
-        case '(': return &TILE_OW3_C036;
-        case ')': return &TILE_OW3_C036;
+        case '$': return &TILE_FR_C036;
+        case '%': return &TILE_FR_C037;
+        case '&': return &TILE_FR_C038;
+        case '(': return &TILE_FR_C040;
+        case ')': return &TILE_FR_C041;
         case '*': return &TILE_FR_C042;
         case '+': return &TILE_FR_C043;
         case ',': return &TILE_FR_C044;
