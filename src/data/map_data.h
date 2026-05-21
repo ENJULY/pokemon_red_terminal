@@ -130,7 +130,25 @@ inline MapDef MAP_0 = {
         "))!!Y99Z))))))))))))",
         nullptr
     },
-    {}, 0,  // npcs
+    {
+        // 팔레트시티 일반 여자 npc
+        {3, 8, {
+            L"친구 집에 놀러왔어요!",
+            nullptr
+        }, NPC_SPR_GIRL},
+
+        // 팔레트시티 길거리 박사 npc(오박사 아님)
+        {8, 5, {
+            L"이 세상에는 수많은 포켓몬들이 있지.",
+            nullptr
+        }, NPC_SPR_OAK},
+
+        // 팔레트시티 일반 낚시꾼 npc
+        {11, 14, {
+            L"이 마을은 평화로워서 좋아.",
+            nullptr
+        }, NPC_SPR_FISHER},
+    }, 3,  // npcs
     {}, 0,  // trainers
     {
         // pokered PalletTown.asm 원본 위치
@@ -188,7 +206,19 @@ inline MapDef MAP_1 = {
         "!!!$!!!!!);;)!!!!!$!",
         nullptr
     },
-    {}, 0,  // npcs
+    {
+        // 1번도로 일반 npc1
+        {5, 24, {
+            L"포켓몬이 귀여워요!",
+            nullptr
+        }, NPC_SPR_LITTLE_BOY},
+
+        // 1번도로 일반 npc2
+        {15, 13, {
+            L"저도 포켓몬 잡고 싶어요.",
+            nullptr
+        }, NPC_SPR_LITTLE_BOY},
+    }, 2,  // npcs
     {}, 0,  // trainers
     {}, 0,  // warps
     {
@@ -252,7 +282,56 @@ inline MapDef MAP_2 = {
             L"공사가 끝나면 다시 와주게.",
             nullptr
         }, NPC_SPR_GRAMPS},
-    }, 1,  // npcs
+
+        // 상록시티 내 일반 소년
+        {13, 20, {
+            L"포켓몬을 잡는 건 정말 재미있죠.",
+            L"저는 매일 여기서 연습하고 있어요.",
+            nullptr
+        }, NPC_SPR_LITTLE_BOY},
+
+        // 상록시티 체육관 옆 npc
+        {30, 8, {
+            L"하하, 포켓몬 배틀은 스릴이 있죠.",
+            L"하지만 항상 조심해야 해요.",
+            L"체육관 관장님 앞에서는 더욱 조심해야 합니다.",
+            nullptr
+        }, NPC_SPR_GENTLEMAN},
+
+        // 상록시티 내 일반 소년 2
+        {30, 25, {
+            L"오늘은 어떤 포켓몬을 잡을까요?",
+            L"저는 풀숲 근처에서 새로운 친구를 찾는 걸 좋아해요.",
+            nullptr
+        }, NPC_SPR_LITTLE_BOY},
+
+        // 상록시티 내 일반 소녀
+        {17, 9, {
+            L"쉿, 옆에서 할아버지가 자고 있어요.",
+            L"조금만 조용히 해주세요.",
+            nullptr
+        }, NPC_SPR_LITTLE_GIRL},
+
+        // 상록시티 내 잠든 노인(이벤트 제외)
+        {18, 9, {
+            L"쿨...쿨...",
+            nullptr
+        }, NPC_SPR_GRAMPS},
+
+        // 상록시티 호수 근처 낚시꾼
+        {6, 23, {
+            L"여기 물가에는 멋진 물타입 포켓몬이 많아요.",
+            L"하루 종일 낚시하면서 기다리고 있죠.",
+            nullptr
+        }, NPC_SPR_FISHER},
+
+        // 상록시티 시내 어른
+        {17, 5, {
+            L"상록시티는 평화롭고 살기 좋은 곳입니다.",
+            L"길을 걷다 보면 다양한 포켓몬도 만날 수 있죠.",
+            nullptr
+        }, NPC_SPR_GENTLEMAN},
+    }, 8,  // npcs
     {}, 0,  // trainers
     {
         {23, 25, MAP_VIRIDIAN_PC, 3, 7},
@@ -354,7 +433,19 @@ inline MapDef MAP_3 = {
             L"지금은 들어갈 수 없어. 다음에 다시 와줘.",
             nullptr
         }, NPC_SPR_GENTLEMAN},
-    }, 1,  // npcs
+
+        // 2번도로 아이템볼 1
+        {13, 54, {
+            L"문스톤을 발견했다.",
+            nullptr
+        }, NPC_SPR_POKE_BALL},
+
+        // 2번도로 아이템볼 2
+        {13, 45, {
+            L"HP에이드를 발견했다.",
+            nullptr
+        }, NPC_SPR_POKE_BALL},
+    }, 3,  // npcs
     {}, 0,  // trainers
     {
         // 디그다 동굴 입구 (NPC가 차단 중이지만 워프는 유지 — 추후 NPC 제거 시 복구)
@@ -434,8 +525,74 @@ inline MapDef MAP_4 = {
         "()()()()()()()$!!!!$()()()()()()()",
         nullptr
     },
-    {}, 0,  // npcs
-    {}, 0,  // trainers
+    {
+        // 상록숲 일반 NPC
+        {16, 43, {
+            L"포켓몬을 잡으러 왔어요!",
+            nullptr
+        }, NPC_SPR_LITTLE_BOY},
+
+        // 상록숲 일반 NPC 2
+        {27, 40, {
+            L"오늘은 꼭 포켓몬을 잡을거야!",
+            nullptr
+        }, NPC_SPR_LITTLE_BOY},
+
+        // 상록숲 아이템볼(해독제)
+        {25, 11, {
+            L"해독제를 찾았다!",
+            nullptr
+        }, NPC_SPR_POKE_BALL},
+
+        // 상록숲 아이템볼(HP포션)
+        {12, 29, {
+            L"HP포션을 찾았다!",
+            nullptr
+        }, NPC_SPR_POKE_BALL},
+
+        // 상록숲 아이템볼(포켓몬볼)
+        {1, 31, {
+            L"포켓몬볼을 찾았다!",
+            nullptr
+        }, NPC_SPR_POKE_BALL},
+    }, 5,  // npcs
+    {
+        // 벌레잡이 삼총사 1
+        {30, 19, 2, 4,
+            L"벌레잡이 소년",
+            L"이봐! 포켓몬 가지고 있구나! 자, 한판 붙자!",
+            {10, 10, 0},       
+            {6, 6, 0},         
+            false,
+            NPC_SPR_BRUNETTE,    
+            4,                   
+            false
+        },
+
+        // 벌레잡이 삼총사 2
+        {30, 33, 2, 4,
+            L"벌레잡이 소년",
+            L"너 포켓몬 트레이너지! 나와 한판 붙자!",
+            {10, 13, 0},
+            {7, 7, 0},
+            false,
+            NPC_SPR_BRUNETTE,
+            4,
+            false
+        },
+
+        // 벌레잡이 삼총사 3
+        {30, 33, 2, 4,
+            L"벌레잡이 소년",
+            L"너 포켓몬 가지고 있구나! 자, 한판 붙자!",
+            {10, 14, 10},
+            {7, 7, 7},
+            false,
+            NPC_SPR_BRUNETTE,
+            4,
+            false
+        },
+    }, 3,  // trainers
     {
         // 북쪽 출구 (1,0)(2,0) → North Gate 아래쪽 (4,7)/(5,7) - 둘 다 walkable
         {1, 0, MAP_FOREST_NORTH_GATE, 4, 7},
@@ -510,7 +667,36 @@ inline MapDef MAP_5 = {
             L"공사가 끝나면 다시 와주게.",
             nullptr
         }, NPC_SPR_GRAMPS},
-    }, 1,  // npcs
+
+        // 회색시티 일반 트레이너 npc
+        {8, 15, {
+            L"포켓몬과 함께 걷는 건 즐거운 일이죠.",
+            L"저는 매일 새로운 포켓몬을 관찰한답니다.",
+            nullptr
+        }, NPC_SPR_BRUNETTE},
+
+        // 회색시티 일반 트레이너 npc 2
+        {17, 25, {
+            L"포켓몬 배틀에는 전략이 필요합니다.",
+            L"단순히 강한 포켓몬만으로는 승리할 수 없어요.",
+            L"연습이 중요하답니다.",
+            nullptr
+        }, NPC_SPR_BRUNETTE},
+
+        // 회색시티 학자 1
+        {27, 17, {
+            L"이곳에는 희귀한 포켓몬이 많아요.",
+            L"저는 데이터를 수집하며 연구하는 걸 좋아한답니다.",
+            nullptr
+        }, NPC_SPR_GENTLEMAN},
+
+        // 회색시티 학자 2
+        {26, 25, {
+            L"길거리를 걷다 보면 포켓몬 행동을 관찰할 수 있습니다.",
+            L"이 연구를 통해 새로운 발견을 기대하고 있습니다.",
+            nullptr
+        }, NPC_SPR_GENTLEMAN},
+    }, 5,  // npcs
     {}, 0,  // trainers
     {
         {14, 7, -1  /*MUSEUM_1F*/, -1, -1},
