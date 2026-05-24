@@ -92,6 +92,8 @@ static const int MAP_PEWTER_MART   = 14;
 static const int MAP_ROUTE2_GATE   = 15;
 static const int MAP_FOREST_NORTH_GATE = 16;
 static const int MAP_FOREST_SOUTH_GATE = 17;
+static const int MAP_VIRIDIAN_SCHOOL_HOUSE   = 18;
+static const int MAP_VIRIDIAN_NICKNAME_HOUSE = 19;
 
 // 실내 맵 ID — 맵 외곽 영역을 풀밭 대신 검정으로 렌더링
 inline bool isIndoorMap(int id) {
@@ -101,7 +103,8 @@ inline bool isIndoorMap(int id) {
            id == MAP_VIRIDIAN_PC || id == MAP_PEWTER_PC ||
            id == MAP_VIRIDIAN_MART || id == MAP_PEWTER_MART ||
            id == MAP_ROUTE2_GATE ||
-           id == MAP_FOREST_NORTH_GATE || id == MAP_FOREST_SOUTH_GATE;
+           id == MAP_FOREST_NORTH_GATE || id == MAP_FOREST_SOUTH_GATE ||
+           id == MAP_VIRIDIAN_SCHOOL_HOUSE || id == MAP_VIRIDIAN_NICKNAME_HOUSE;
 }
 
 // ─── Pallet Town (20×18) — pokered PalletTown.blk 원본 ─────────
@@ -131,24 +134,21 @@ inline MapDef MAP_0 = {
         nullptr
     },
     {
-        // 팔레트시티 일반 여자 npc
+        // pokered PALLETTOWN_GIRL (3, 8) — _PalletTownGirlText
+        // (8, 5) Oak 정적 NPC는 제거 — 원본에서도 OAK_INTERCEPT 이벤트로만 등장
         {3, 8, {
-            L"친구 집에 놀러왔어요!",
+            L"저도 포켓몬을 기르고 있어요!",
+            L"강하게 키우면 저를 지켜줄 거예요!",
             nullptr
         }, NPC_SPR_GIRL},
 
-        // 팔레트시티 길거리 박사 npc(오박사 아님)
-        {8, 5, {
-            L"이 세상에는 수많은 포켓몬들이 있지.",
-            nullptr
-        }, NPC_SPR_OAK},
-
-        // 팔레트시티 일반 낚시꾼 npc
+        // pokered PALLETTOWN_FISHER (11, 14) — _PalletTownFisherText
         {11, 14, {
-            L"이 마을은 평화로워서 좋아.",
+            L"기술은 정말 대단해!",
+            L"PC로 도구와 포켓몬을 데이터로 저장하고 꺼낼 수 있다니까!",
             nullptr
         }, NPC_SPR_FISHER},
-    }, 3,  // npcs
+    }, 2,  // npcs
     {}, 0,  // trainers
     {
         // pokered PalletTown.asm 원본 위치
@@ -207,15 +207,20 @@ inline MapDef MAP_1 = {
         nullptr
     },
     {
-        // 1번도로 일반 npc1
+        // pokered ROUTE1_YOUNGSTER1 (5, 24) — _Route1Youngster1MartSampleText
+        // 원본은 포션 샘플 지급, 클론은 대사만 매핑
         {5, 24, {
-            L"포켓몬이 귀여워요!",
+            L"안녕! 나는 포켓몬마트에서 일해.",
+            L"상록시티에 있으니까 꼭 들러줘!",
+            L"자, 샘플로 이거 가져가!",
             nullptr
         }, NPC_SPR_LITTLE_BOY},
 
-        // 1번도로 일반 npc2
+        // pokered ROUTE1_YOUNGSTER2 (15, 13) — _Route1Youngster2Text (절벽 점프 팁)
         {15, 13, {
-            L"저도 포켓몬 잡고 싶어요.",
+            L"길가의 절벽들이 보이지?",
+            L"좀 무섭지만 점프해서 내려갈 수 있어.",
+            L"팔레트로 빨리 돌아가는 지름길이지!",
             nullptr
         }, NPC_SPR_LITTLE_BOY},
     }, 2,  // npcs
@@ -275,7 +280,7 @@ inline MapDef MAP_2 = {
         nullptr
     },
     {
-        // 서쪽 22번도로 입구 차단 노인 — 공사중 안내
+        // 서쪽 22번도로 입구 차단 노인 — 공사중 안내 (게임 스코프 한정용 커스텀 NPC)
         {5, 17, {
             L"할아버지: 으흠... 22번도로는 지금 공사중이라네.",
             L"미안하지만 지금은 들어갈 수 없어.",
@@ -283,62 +288,72 @@ inline MapDef MAP_2 = {
             nullptr
         }, NPC_SPR_GRAMPS},
 
-        // 상록시티 내 일반 소년
+        // pokered YOUNGSTER1 (13, 20) — _ViridianCityYoungster1Text
         {13, 20, {
-            L"포켓몬을 잡는 건 정말 재미있죠.",
-            L"저는 매일 여기서 연습하고 있어요.",
+            L"어이! 허리에 차고 있는 그 몬스터볼!",
+            L"너 포켓몬을 가지고 있구나!",
+            L"언제 어디서나 포켓몬을 데리고 다닐 수 있다니 멋지지!",
             nullptr
         }, NPC_SPR_LITTLE_BOY},
 
-        // 상록시티 체육관 옆 npc
+        // pokered GAMBLER1 (30, 8) — _ViridianCityGambler1GymAlwaysClosedText
+        // SPRITE_GAMBLER = 노인 → NPC_SPR_GRAMPS
         {30, 8, {
-            L"하하, 포켓몬 배틀은 스릴이 있죠.",
-            L"하지만 항상 조심해야 해요.",
-            L"체육관 관장님 앞에서는 더욱 조심해야 합니다.",
-            nullptr
-        }, NPC_SPR_GENTLEMAN},
-
-        // 상록시티 내 일반 소년 2
-        {30, 25, {
-            L"오늘은 어떤 포켓몬을 잡을까요?",
-            L"저는 풀숲 근처에서 새로운 친구를 찾는 걸 좋아해요.",
-            nullptr
-        }, NPC_SPR_LITTLE_BOY},
-
-        // 상록시티 내 일반 소녀
-        {17, 9, {
-            L"쉿, 옆에서 할아버지가 자고 있어요.",
-            L"조금만 조용히 해주세요.",
-            nullptr
-        }, NPC_SPR_LITTLE_GIRL},
-
-        // 상록시티 내 잠든 노인(이벤트 제외)
-        {18, 9, {
-            L"쿨...쿨...",
+            L"이 포켓몬 체육관은 항상 닫혀있어.",
+            L"도대체 관장이 누구일까?",
             nullptr
         }, NPC_SPR_GRAMPS},
 
-        // 상록시티 호수 근처 낚시꾼
+        // pokered YOUNGSTER2 (30, 25) — _ViridianCityYoungster2YouWantToKnowAboutText
+        {30, 25, {
+            L"쐐기벌레 포켓몬 2종류에 대해 알고 싶니?",
+            L"캐터피는 독이 없지만, 뿔충이는 독이 있어.",
+            L"뿔충이의 독침붕 공격을 조심해!",
+            nullptr
+        }, NPC_SPR_LITTLE_BOY},
+
+        // pokered GIRL (17, 9) — _ViridianCityGirlHasntHadHisCoffeeYetText
+        {17, 9, {
+            L"앗, 할아버지! 너무 그러지 마세요!",
+            L"할아버지는 아직 커피도 못 드셨거든요.",
+            nullptr
+        }, NPC_SPR_LITTLE_GIRL},
+
+        // pokered OLD_MAN_SLEEPY (18, 9) — _ViridianCityOldManSleepyPrivatePropertyText
+        // SPRITE_GAMBLER_ASLEEP — NPC_SPR_GRAMPS 유지
+        {18, 9, {
+            L"이쪽으로는 지나갈 수 없다!",
+            L"여기는 사유지란 말이다!",
+            nullptr
+        }, NPC_SPR_GRAMPS},
+
+        // pokered FISHER (6, 23) — ViridianCityFisherYouCanHaveThisText (드림이터 TM)
         {6, 23, {
-            L"여기 물가에는 멋진 물타입 포켓몬이 많아요.",
-            L"하루 종일 낚시하면서 기다리고 있죠.",
+            L"하암~! 햇볕에 깜빡 졸았네. 슬리프가 꿈을 먹는 꿈을 꿨어.",
+            L"어라? 이 비전머신은 어디서 났지?",
+            L"왠지 으스스하군... 자, 너 가져라!",
             nullptr
         }, NPC_SPR_FISHER},
 
-        // 상록시티 시내 어른
+        // pokered OLD_MAN (17, 5) — _ViridianCityOldManHadMyCoffeeNowText (커피 영감님)
+        // SPRITE_GAMBLER (걸어다님) — NPC_SPR_GRAMPS
         {17, 5, {
-            L"상록시티는 평화롭고 살기 좋은 곳입니다.",
-            L"길을 걷다 보면 다양한 포켓몬도 만날 수 있죠.",
+            L"아하, 이제 커피를 마셨더니 기분이 좋군!",
+            L"그래, 지나가도 좋아!",
+            L"바쁜가? 시간이 곧 돈이지...",
             nullptr
-        }, NPC_SPR_GENTLEMAN},
+        }, NPC_SPR_GRAMPS},
     }, 8,  // npcs
     {}, 0,  // trainers
     {
         {23, 25, MAP_VIRIDIAN_PC, 3, 7},
         {29, 19, MAP_VIRIDIAN_MART, 3, 7},
-        {21, 15, -1  /*VIRIDIAN_SCHOOL_HOUSE*/, -1, -1},
-        {21, 9, -1  /*VIRIDIAN_NICKNAME_HOUSE*/, -1, -1},
-        {32, 7, -1  /*VIRIDIAN_GYM*/, -1, -1},
+        // 학교(트레이너 팁) 하우스 — pokered ViridianSchoolHouse
+        {21, 15, MAP_VIRIDIAN_SCHOOL_HOUSE, 3, 7},
+        // 별명짓기 하우스 — pokered ViridianNicknameHouse
+        {21, 9, MAP_VIRIDIAN_NICKNAME_HOUSE, 3, 7},
+        // 상록시티 체육관 — pokered: 8뱃지 모을 때까지 잠겨있음. destMap=-1 → "문이 잠겨있다..."
+        {32, 7, -1  /*VIRIDIAN_GYM (locked)*/, -1, -1},
     }, 5,  // warps
     {}, 0,  // no encounters
     MAP_ROUTE2, MAP_ROUTE1,  // north/south
@@ -557,36 +572,37 @@ inline MapDef MAP_4 = {
         }, NPC_SPR_POKE_BALL},
     }, 5,  // npcs
     {
-        // 벌레잡이 삼총사 1
-        {30, 19, 2, 4,
-            L"벌레잡이 소년",
-            L"이봐! 포켓몬 가지고 있구나! 자, 한판 붙자!",
-            {10, 10, 0},       
-            {6, 6, 0},         
-            false,
-            NPC_SPR_BRUNETTE,    
-            4,                   
-            false
-        },
-
-        // 벌레잡이 삼총사 2
+        // pokered VIRIDIANFOREST_YOUNGSTER2 (30, 33) facing LEFT — BugCatcher #1
         {30, 33, 2, 4,
             L"벌레잡이 소년",
             L"너 포켓몬 트레이너지! 나와 한판 붙자!",
-            {10, 13, 0},
-            {7, 7, 0},
+            {13, 10, 0},        // 뿔충이 + 캐터피
+            {6, 6, 0},
             false,
             NPC_SPR_BRUNETTE,
             4,
             false
         },
 
-        // 벌레잡이 삼총사 3
-        {30, 33, 2, 4,
+        // pokered VIRIDIANFOREST_YOUNGSTER3 (30, 19) facing LEFT — BugCatcher #2
+        {30, 19, 2, 4,
             L"벌레잡이 소년",
-            L"너 포켓몬 가지고 있구나! 자, 한판 붙자!",
-            {10, 14, 10},
+            L"이봐! 포켓몬 가지고 있구나! 자, 한판 붙자!",
+            {13, 14, 13},       // 뿔충이 + 단데기 + 뿔충이
             {7, 7, 7},
+            false,
+            NPC_SPR_BRUNETTE,
+            4,
+            false
+        },
+
+        // pokered VIRIDIANFOREST_YOUNGSTER4 (2, 18) facing LEFT — BugCatcher #3
+        // 원본은 (30,33) 중복이었으나 (2,18)이 정상 위치
+        {2, 18, 2, 4,
+            L"벌레잡이 소년",
+            L"숲에서 만난 트레이너끼리는 싸우는 게 룰이야!",
+            {13, 0, 0},         // 뿔충이 단일
+            {9, 0, 0},
             false,
             NPC_SPR_BRUNETTE,
             4,
@@ -660,7 +676,8 @@ inline MapDef MAP_5 = {
         nullptr
     },
     {
-        // 동쪽 3번도로 입구 차단 노인 — Viridian 서쪽 22번도로 패턴과 동일
+        // 동쪽 3번도로 입구 차단 노인 — 게임 스코프 한정용 커스텀 NPC
+        // (원본 (35,16)의 YOUNGSTER "브록한테 데려가줄게" 대신 배치)
         {35, 17, {
             L"할아버지: 으흠... 3번도로는 지금 공사중이라네.",
             L"미안하지만 지금은 들어갈 수 없어.",
@@ -668,32 +685,32 @@ inline MapDef MAP_5 = {
             nullptr
         }, NPC_SPR_GRAMPS},
 
-        // 회색시티 일반 트레이너 npc
+        // pokered PEWTERCITY_COOLTRAINER_F (8, 15) — _PewterCityCooltrainerFText
         {8, 15, {
-            L"포켓몬과 함께 걷는 건 즐거운 일이죠.",
-            L"저는 매일 새로운 포켓몬을 관찰한답니다.",
+            L"소문에 따르면 픽시는 달에서 왔대요!",
+            L"문스톤이 달의돌산에 떨어진 후 나타났다고 하네요.",
             nullptr
         }, NPC_SPR_BRUNETTE},
 
-        // 회색시티 일반 트레이너 npc 2
+        // pokered PEWTERCITY_COOLTRAINER_M (17, 25) — _PewterCityCooltrainerMText
         {17, 25, {
-            L"포켓몬 배틀에는 전략이 필요합니다.",
-            L"단순히 강한 포켓몬만으로는 승리할 수 없어요.",
-            L"연습이 중요하답니다.",
+            L"여기엔 진지한 포켓몬 트레이너가 별로 없어요.",
+            L"다들 벌레잡이 같은 풋내기들이죠.",
+            L"하지만 회색체육관의 브록은 정말 진심이라구요!",
             nullptr
         }, NPC_SPR_BRUNETTE},
 
-        // 회색시티 학자 1
+        // pokered PEWTERCITY_SUPER_NERD1 (27, 17) — _PewterCitySuperNerd1ItsRightHereText
         {27, 17, {
-            L"이곳에는 희귀한 포켓몬이 많아요.",
-            L"저는 데이터를 수집하며 연구하는 걸 좋아한답니다.",
+            L"박물관 들러봤어?",
+            L"바로 여기야! 입장료 내야 하지만 그만한 가치가 있다구!",
             nullptr
         }, NPC_SPR_GENTLEMAN},
 
-        // 회색시티 학자 2
+        // pokered PEWTERCITY_SUPER_NERD2 (26, 25) — _PewterCitySuperNerd2ImSprayingRepelText
         {26, 25, {
-            L"길거리를 걷다 보면 포켓몬 행동을 관찰할 수 있습니다.",
-            L"이 연구를 통해 새로운 발견을 기대하고 있습니다.",
+            L"쉿! 내가 뭐 하는지 알아?",
+            L"리펠 뿌려서 정원에 포켓몬 못 오게 하는 거야!",
             nullptr
         }, NPC_SPR_GENTLEMAN},
     }, 5,  // npcs
@@ -844,9 +861,12 @@ inline MapDef MAP_9 = {
     nullptr  // bgm
 };
 
-// ─── Pewter Gym (8×14) ─────────────────────────────────────
 // ─── Pewter Gym (10×14) ─── pokered PewterGym.blk (5×7 blocks)
-// 브록 (4,1) + 주니어 트레이너 (3,6) + 안내인 (7,10) + 출구 도어 (4,13)(5,13) → Pewter (16,17)
+// pokered 원본 NPC 3명 매핑 (data/maps/objects/PewterGym.asm):
+//   (4,1) BROCK 보스 (DOWN, OPP_BROCK) — 꼬마돌12 + 롱스톤14, 승리 → 회색뱃지/엔딩
+//   (3,6) Jr Trainer (RIGHT, OPP_JR_TRAINER_M) — 잡몹, 시야 5칸
+//   (7,10) GYM_GUIDE — 비전투, 트레이너 팁 NPC
+// 출구 도어 (4,13)(5,13) → Pewter (16,17)
 inline MapDef MAP_8 = {
     MAP_PEWTER_GYM, 10, 14,
     "Pewter Gym", L"회색시티 체육관",
@@ -868,8 +888,41 @@ inline MapDef MAP_8 = {
         "!!!!?\?!!!!",  // ?\?: 트라이그래프 회피 (??! → |)
         nullptr
     },
-    {}, 0,  // npcs
-    {}, 0,  // trainers
+    {
+        // GYM_GUIDE (7,10) — pokered _PewterGymGuidePreAdviceText 요약본
+        {7, 10, {
+            L"안내인: 어이! 너 챔피언이 될 자질이 보이는걸!",
+            L"나는 트레이너는 아니지만 한 수 알려줄게.",
+            L"앞쪽 포켓몬이 먼저 나가니까 순서를 잘 정해!",
+            nullptr
+        }, NPC_SPR_GENTLEMAN},
+    }, 1,  // npcs
+    {
+        // Jr Trainer (3,6) facing RIGHT, sightRange 5 — pokered _PewterGymCooltrainerMBattleText
+        // 원본 파티: Diglett(50) + Sandshrew(27) Lv11 — 두 종 모두 미구현이라 꼬마돌+꼬렛으로 대체
+        {3, 6, /*dir=RIGHT*/3, /*sight*/5,
+            L"주니어 트레이너",
+            L"거기서! 너 같은 풋내기가 브록 님 앞에 갈 수준은 아니야!",
+            {74, 19, 0},   // 꼬마돌, 꼬렛
+            {11, 11, 0},
+            false,
+            NPC_SPR_BRUNETTE,   // OW: COOLTRAINER_M 대체
+            5,                  // intro: COOLTRAINER_M
+            false               // isBoss
+        },
+        // BROCK (4,1) facing DOWN, sightRange 10 — 보스. 파티는 startBrock()에서 하드코딩(꼬마돌12+롱스톤14).
+        // pokered _PewterGymBrockPreBattleText 요약. 승리 시 player_.beatenBrock=true → ENDING.
+        {4, 1, /*dir=DOWN*/0, /*sight*/10,
+            L"관장 브록",
+            L"나는 회색시티 체육관의 관장 브록!\n바위 포켓몬은 최강이다!",
+            {74, 95, 0},   // 꼬마돌, 롱스톤 (참고용 — startBrock이 덮어씀)
+            {12, 14, 0},
+            false,
+            NPC_SPR_BRUNETTE,   // OW: SUPER_NERD 대체
+            3,                  // intro: BROCK
+            true                // isBoss → BOSS_BATTLE
+        },
+    }, 2,  // trainers
     {
         // 출구 (4,13)(5,13) → Pewter (16,17) 체육관 앞
         {4, 13, MAP_PEWTER, 16, 17},
@@ -1089,7 +1142,21 @@ inline MapDef MAP_15 = {
         "&!!!**!!!&",
         nullptr
     },
-    {}, 0,  // npcs (Route 2 Gate 보조원 NPC 제거됨)
+    {
+        // pokered ROUTE2GATE_OAKS_AIDE (1, 4) — SCIENTIST, FLASH HM 설명
+        {1, 4, {
+            L"오박사 보조원: 비전머신 플래시는",
+            L"가장 어두운 던전도 환하게 밝혀줍니다.",
+            nullptr
+        }, NPC_SPR_GENTLEMAN},
+
+        // pokered ROUTE2GATE_YOUNGSTER (5, 4) — Rock Tunnel/FLASH 안내
+        {5, 4, {
+            L"포켓몬한테 플래시를 가르치면",
+            L"돌산터널을 통과할 수 있어!",
+            nullptr
+        }, NPC_SPR_LITTLE_BOY},
+    }, 2,  // npcs
     {}, 0,  // trainers
     {
         // 위 출구 (4,0)(5,0) → Route 2 (16,35) [게이트 북쪽 입구의 도착지]
@@ -1123,7 +1190,21 @@ inline MapDef MAP_16 = {
         "&!!!**!!!&",
         nullptr
     },
-    {}, 0,  // npcs
+    {
+        // pokered VIRIDIANFORESTNORTHGATE_SUPER_NERD (3, 2) — 포켓몬 다양성 팁
+        {3, 2, {
+            L"많은 포켓몬은 숲이나 동굴에만 산다구!",
+            L"여기저기 다녀봐야 다양한 종류를 만날 수 있어!",
+            nullptr
+        }, NPC_SPR_GENTLEMAN},
+
+        // pokered VIRIDIANFORESTNORTHGATE_GRAMPS (2, 5) — CUT 기술 힌트
+        {2, 5, {
+            L"할아버지: 길가의 덤불을 봤니?",
+            L"특별한 포켓몬 기술로 베어낼 수 있단다.",
+            nullptr
+        }, NPC_SPR_GRAMPS},
+    }, 2,  // npcs
     {}, 0,  // trainers
     {
         // 위 (4,0)(5,0) → Route 2 (3,11) — 게이트 위쪽 입구 위치
@@ -1156,7 +1237,21 @@ inline MapDef MAP_17 = {
         "&!!!**!!!&",
         nullptr
     },
-    {}, 0,  // npcs
+    {
+        // pokered VIRIDIANFORESTSOUTHGATE_GIRL (8, 4) — 숲 미로 경고
+        {8, 4, {
+            L"상록숲 가는 거니?",
+            L"자연이 만든 미로니까 조심해야 해!",
+            nullptr
+        }, NPC_SPR_GIRL},
+
+        // pokered VIRIDIANFORESTSOUTHGATE_LITTLE_GIRL (2, 4) — 꼬렛 잡았어?
+        {2, 4, {
+            L"꼬렛은 작지만 물면 정말 아파!",
+            L"너 한 마리 잡았어?",
+            nullptr
+        }, NPC_SPR_LITTLE_GIRL},
+    }, 2,  // npcs
     {}, 0,  // trainers
     {
         // 위 (4,0)(5,0) → Forest 남쪽 (15,47)/(16,47)
@@ -1169,6 +1264,100 @@ inline MapDef MAP_17 = {
     {}, 0,  // no encounters
     -1, -1,  // north/south
     4, 7, 4, 7,  // entry
+    nullptr  // bgm
+};
+
+// ─── Viridian School House (8×8) — pokered ViridianSchoolHouse ─────
+// 원본 NPC 2명: (3,5) BRUNETTE_GIRL 노트 외우기, (4,1) COOLTRAINER_F 칠판 안내.
+// 워프 (2,7)(3,7) → 상록시티 (21,16) [도어 (21,15) 한 칸 아래].
+inline MapDef MAP_18 = {
+    MAP_VIRIDIAN_SCHOOL_HOUSE, 8, 8,
+    "Viridian School", L"상록시티 학교",
+    {
+        // 표준 RedsHouse 톤 (벽/floor 패턴 일관). 칠판/책상은 가구 'x','y','z','A','B'로 표현.
+        "qqrsrsrs",   // 윗벽 — 칠판은 (4,1)의 COOLTRAINER 위에 있다고 가정
+        "ttuuuuuu",   // floor — (4,1) COOLTRAINER 위치
+        "uuuuuuuu",
+        "uuxyzxuu",   // 책상 줄
+        "uuxABxuu",   // 책상 줄
+        "uuuuuuuu",   // (3,5) BRUNETTE_GIRL 위치 (책상 옆 floor)
+        "uuuuuuuu",
+        "uuCCuuuu",   // 도어 (워프 트리거)
+        nullptr
+    },
+    {
+        // COOLTRAINER_F (4,1) — pokered: SPRITE_COOLTRAINER_F facing DOWN
+        {4, 1, {
+            L"좋아요!",
+            L"칠판을 잘 읽어보세요!",
+            nullptr
+        }, NPC_SPR_BRUNETTE},
+        // BRUNETTE_GIRL (3,5) — pokered: SPRITE_BRUNETTE_GIRL facing UP
+        {3, 5, {
+            L"휴~ 노트를 다 외우려고 노력 중이야.",
+            nullptr
+        }, NPC_SPR_BRUNETTE},
+    }, 2,  // npcs
+    {}, 0,  // trainers
+    {
+        // 도어 (2,7)(3,7) → 상록시티 (21,16) — 학교 정문(21,15) 바로 아래 floor
+        {2, 7, MAP_VIRIDIAN, 21, 16},
+        {3, 7, MAP_VIRIDIAN, 21, 16},
+    }, 2,  // warps
+    {}, 0,  // no encounters
+    -1, MAP_VIRIDIAN,  // north/south
+    3, 7, 3, 7,  // entry
+    nullptr  // bgm
+};
+
+// ─── Viridian Nickname House (8×8) — pokered ViridianNicknameHouse ─────
+// 원본 NPC 4: BALDING_GUY, LITTLE_GIRL, SPEAROW(BIRD), CLIPBOARD 표지판.
+// 클론 단순화: 깨비참 케이지를 가구 타일('v')로 표현하고, 표지판 텍스트는 깨비참 인터랙트에 통합.
+// 워프 (2,7)(3,7) → 상록시티 (21,10).
+inline MapDef MAP_19 = {
+    MAP_VIRIDIAN_NICKNAME_HOUSE, 8, 8,
+    "Nickname House", L"별명짓기집",
+    {
+        "qqrsrsrs",
+        "ttuvuuuv",
+        "uuuuuuuu",
+        "uuuuuuuu",
+        "uuuuuuuu",
+        "uuuuuvuu",   // (5,5) 'v' = 책장/가구 타일 = 깨비참 케이지 비주얼
+        "uuuuuuuu",
+        "uuCCuuuu",
+        nullptr
+    },
+    {
+        // BALDING_GUY (5,3) — pokered: SPRITE_BALDING_GUY (대머리 아저씨)
+        {5, 3, {
+            L"아저씨: 별명 짓는 건 재밌지만, 어렵단다.",
+            L"단순한 이름이 기억하기 가장 쉽지.",
+            nullptr
+        }, NPC_SPR_GENTLEMAN},
+        // LITTLE_GIRL (1,4) — pokered: SPRITE_LITTLE_GIRL
+        {1, 4, {
+            L"여자아이: 우리 아빠도 포켓몬을 좋아하셔!",
+            nullptr
+        }, NPC_SPR_LITTLE_GIRL},
+        // SPEAROW + CLIPBOARD 통합: 케이지 'v' 옆 (4,5) floor 에서 인터랙트
+        // POKE_BALL 두 개가 어색해서 클립보드는 제거, 정보는 깨비참 대사로 합침
+        {4, 5, {
+            L"[케이지 안에서 작은 새가 지저귄다]",
+            L"스피어 (깨비참): 츳위~!",
+            L"※ 별명: 스피어",
+            nullptr
+        }, NPC_SPR_POKE_BALL},
+    }, 3,  // npcs
+    {}, 0,  // trainers
+    {
+        // 도어 (2,7)(3,7) → 상록시티 (21,10) — 별명집 정문(21,9) 바로 아래
+        {2, 7, MAP_VIRIDIAN, 21, 10},
+        {3, 7, MAP_VIRIDIAN, 21, 10},
+    }, 2,  // warps
+    {}, 0,  // no encounters
+    -1, MAP_VIRIDIAN,  // north/south
+    3, 7, 3, 7,  // entry
     nullptr  // bgm
 };
 
@@ -1194,8 +1383,10 @@ inline MapDef* ALL_MAPS[] = {
     &MAP_15,
     &MAP_16,
     &MAP_17,
+    &MAP_18,
+    &MAP_19,
 };
-inline constexpr int NUM_MAPS = 18;
+inline constexpr int NUM_MAPS = 20;
 
 inline MapDef* getMap(int id) {
     if (id >= 0 && id < NUM_MAPS) return ALL_MAPS[id];

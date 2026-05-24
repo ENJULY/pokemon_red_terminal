@@ -234,11 +234,12 @@ void Game::update(Key key) {
                 }
 
                 if (!won && res == BattleResult::LOSE) {
-                    // 전멸 → 팔레트시티로
+                    // 전멸 → 엄마 집 1F 으로 (원본 동작). 엄마(5,4) 바로 위에 등장 → 아래 보면 엄마.
                     healAll(player_);
-                    player_.mapId = MAP_PALLET;
-                    player_.x = 11; player_.y = 7;
-                    if (ow_) ow_->onReturnFromBattle(false);
+                    player_.mapId = MAP_PLAYER_HOUSE;
+                    player_.x = 5; player_.y = 3;
+                    player_.dir = 0;            // 아래 = 엄마 향함
+                    if (ow_) ow_->init();       // state_ ← player_ 동기화
                     changeScene(Scene::GAME_OVER);
                 } else if (!player_.beatenRival1 && won) {
                     // 라이벌 첫 배틀 승리 → 포켓덱스 수령
@@ -756,11 +757,13 @@ void Game::updateReceiveDex(Key key) {
     if (key == Key::A) {
         dexStep_++;
         if (dexStep_ >= 4 || !DEX_LINES[dexStep_]) {
-            // 오버월드로 전환
+            // 오버월드로 전환 — 플레이어는 연구소 안에 그대로 있어야 함 (원본은 직접 걸어 나감).
+            // 오박사(5,3) 와 라이벌 자리(4,8) 사이 floor (5,8) 로 배치.
             player_.hasPokedex  = true;
             player_.pokeballs   = 5;
-            player_.mapId = MAP_PALLET;
-            player_.x = 11; player_.y = 7;
+            player_.mapId = MAP_OAK_LAB;
+            player_.x = 5; player_.y = 8;
+            player_.dir = 0;              // 아래 = 문 향함
             if (!ow_) ow_ = new Overworld(renderer, player_);
             ow_->init();
             changeScene(Scene::OVERWORLD);

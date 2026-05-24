@@ -195,14 +195,9 @@ void Overworld::updateCutscene(Key key) {
 }
 
 void Overworld::onReturnFromBattle(bool won) {
-    // 패배 시 팔레트시티로 리셋
-    if (!won) {
-        state_.mapId = MAP_PALLET;
-        state_.px = 11; state_.py = 7;
-        pl_.mapId = state_.mapId;
-        pl_.x = state_.px; pl_.y = state_.py;
-        return;
-    }
+    // 좌표 동기화만 수행 — 팔레트 워프(전멸 처리)는 game.cpp의 LOSE 분기 단독 책임.
+    // 도망(ESCAPE)/잡몹 승리 모두 won=false/true 와 무관하게 현재 위치 유지.
+    (void)won;
     pl_.mapId = state_.mapId;
     pl_.x = state_.px; pl_.y = state_.py;
 }

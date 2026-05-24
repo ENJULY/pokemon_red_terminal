@@ -10,20 +10,13 @@ REM  - Builds and launches the game in one step
 REM ============================================================
 
 REM ====== Locate g++ ======
-REM 1) Try PATH first
+REM 1) Prefer modern MinGW-w64 (C++17 inline variables need g++ 7+)
+REM    This avoids old MinGW.org GCC 6.3 in PATH
 set "GXX="
-where g++ >nul 2>&1
-if %errorlevel% equ 0 (
-    set "GXX=g++"
-    goto :found
-)
-
-REM 2) Try common MinGW-w64 install locations
 for %%P in (
     "C:\mingw64\bin\g++.exe"
     "C:\msys64\mingw64\bin\g++.exe"
     "C:\msys64\ucrt64\bin\g++.exe"
-    "C:\MinGW\bin\g++.exe"
     "C:\Program Files\mingw64\bin\g++.exe"
     "C:\Program Files (x86)\mingw64\bin\g++.exe"
     "%LOCALAPPDATA%\Programs\mingw64\bin\g++.exe"
@@ -34,6 +27,20 @@ for %%P in (
         set "PATH=%%~dpP;!PATH!"
         goto :found
     )
+)
+
+REM 2) Fallback: PATH g++ (may be too old, will error during build)
+where g++ >nul 2>&1
+if %errorlevel% equ 0 (
+    set "GXX=g++"
+    goto :found
+)
+
+REM 3) Last resort: old MinGW.org (likely fails on C++17 inline vars)
+if exist "C:\MinGW\bin\g++.exe" (
+    set "GXX=C:\MinGW\bin\g++.exe"
+    set "PATH=C:\MinGW\bin;!PATH!"
+    goto :found
 )
 
 echo [ERROR] g++.exe not found.
@@ -102,5 +109,6 @@ echo  Launching game...
 echo ============================================
 echo.
 
-REM Launch the game. Window closes automatically when game exits.
-build\PokemonRed.exe
+REM Launch in a NEW console window so behavior matches EXE double-click
+REM (avoids inheriting build.bat's parent cmd console size/font)
+start "PokemonRed" build\PokemonRed.exe
