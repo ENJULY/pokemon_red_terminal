@@ -10,13 +10,20 @@ REM  - Builds and launches the game in one step
 REM ============================================================
 
 REM ====== Locate g++ ======
-REM 1) Try modern MinGW-w64 install locations FIRST (PATH may have an old GCC)
-REM    C++17 inline variables require g++ 7.0+
+REM 1) Try PATH first
 set "GXX="
+where g++ >nul 2>&1
+if %errorlevel% equ 0 (
+    set "GXX=g++"
+    goto :found
+)
+
+REM 2) Try common MinGW-w64 install locations
 for %%P in (
     "C:\mingw64\bin\g++.exe"
-    "C:\msys64\ucrt64\bin\g++.exe"
     "C:\msys64\mingw64\bin\g++.exe"
+    "C:\msys64\ucrt64\bin\g++.exe"
+    "C:\MinGW\bin\g++.exe"
     "C:\Program Files\mingw64\bin\g++.exe"
     "C:\Program Files (x86)\mingw64\bin\g++.exe"
     "%LOCALAPPDATA%\Programs\mingw64\bin\g++.exe"
@@ -27,13 +34,6 @@ for %%P in (
         set "PATH=%%~dpP;!PATH!"
         goto :found
     )
-)
-
-REM 2) Fall back to PATH
-where g++ >nul 2>&1
-if %errorlevel% equ 0 (
-    set "GXX=g++"
-    goto :found
 )
 
 echo [ERROR] g++.exe not found.
