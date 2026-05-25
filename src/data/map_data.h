@@ -19,12 +19,24 @@
 //   6 GIRL  7 BRUNETTE   8 LITTLE_BOY  9 LITTLE_GIRL  10 FISHER
 //   11 GENTLEMAN   12 POKE_BALL
 // NpcDef.trigger: 대화 종료 시 emit할 이벤트
-//   0 = 없음, 1 = STARTER_TRIGGER (연구소 오박사 → 스타터 선택)
+//   0 = 없음, 1 = STARTER_TRIGGER (연구소 오박사 → 스타터 선택, partySize==0일 때만)
+//   2 = NURSE_HEAL  3 = 마트 소포 수령(gotParcel 설정)
+// NpcDef.tag: 조건부 동작/표시 NPC 식별자
+enum NpcTag {
+    NPC_TAG_NONE           = 0,
+    NPC_TAG_OAK_LAB        = 1, // 연구소 오박사 (소포 퀘스트 처리)
+    NPC_TAG_BLUE_LAB       = 2, // 연구소 블루 (beatenRival1 후 대사 변경 → 사라짐)
+    NPC_TAG_BALL_BULBASAUR = 3, // 이상해씨 몬스터볼 (선택 시 숨김)
+    NPC_TAG_BALL_CHARMANDER= 4, // 파이리 몬스터볼
+    NPC_TAG_BALL_SQUIRTLE  = 5, // 꼬부기 몬스터볼
+    NPC_TAG_VIRIDIAN_CLERK = 6, // 상록 마트 점원 (gotParcel 후 대사 변경)
+};
 struct NpcDef {
     int x, y;
     const wchar_t* lines[4];
-    int spriteId = 0;       // 기본 0 = MOM
-    int trigger  = 0;       // 기본 0 = 트리거 없음
+    int spriteId = 0;
+    int trigger  = 0;
+    int tag      = 0;
 };
 
 struct TrainerDef {
@@ -137,15 +149,15 @@ inline MapDef MAP_0 = {
         // pokered PALLETTOWN_GIRL (3, 8) — _PalletTownGirlText
         // (8, 5) Oak 정적 NPC는 제거 — 원본에서도 OAK_INTERCEPT 이벤트로만 등장
         {3, 8, {
-            L"저도 포켓몬을 기르고 있어요!",
-            L"강하게 키우면 저를 지켜줄 거예요!",
+            L"소녀: 저도 포켓몬을 기르고 있어요!",
+            L"소녀: 강하게 키우면 저를 지켜줄 거예요!",
             nullptr
         }, NPC_SPR_GIRL},
 
         // pokered PALLETTOWN_FISHER (11, 14) — _PalletTownFisherText
         {11, 14, {
-            L"기술은 정말 대단해!",
-            L"PC로 도구와 포켓몬을 데이터로 저장하고 꺼낼 수 있다니까!",
+            L"낚시꾼: 기술은 정말 대단해!",
+            L"낚시꾼: PC로 도구와 포켓몬을 데이터로 저장하고 꺼낼 수 있다니까!",
             nullptr
         }, NPC_SPR_FISHER},
     }, 2,  // npcs
@@ -210,17 +222,17 @@ inline MapDef MAP_1 = {
         // pokered ROUTE1_YOUNGSTER1 (5, 24) — _Route1Youngster1MartSampleText
         // 원본은 포션 샘플 지급, 클론은 대사만 매핑
         {5, 24, {
-            L"안녕! 나는 포켓몬마트에서 일해.",
-            L"상록시티에 있으니까 꼭 들러줘!",
-            L"자, 샘플로 이거 가져가!",
+            L"소년: 안녕! 나는 포켓몬마트에서 일해.",
+            L"소년: 상록시티에 있으니까 꼭 들러줘!",
+            L"소년: 자, 샘플로 이거 가져가!",
             nullptr
         }, NPC_SPR_LITTLE_BOY},
 
         // pokered ROUTE1_YOUNGSTER2 (15, 13) — _Route1Youngster2Text (절벽 점프 팁)
         {15, 13, {
-            L"길가의 절벽들이 보이지?",
-            L"좀 무섭지만 점프해서 내려갈 수 있어.",
-            L"팔레트로 빨리 돌아가는 지름길이지!",
+            L"소년: 길가의 절벽들이 보이지?",
+            L"소년: 좀 무섭지만 점프해서 내려갈 수 있어.",
+            L"소년: 팔레트로 빨리 돌아가는 지름길이지!",
             nullptr
         }, NPC_SPR_LITTLE_BOY},
     }, 2,  // npcs
@@ -290,57 +302,57 @@ inline MapDef MAP_2 = {
 
         // pokered YOUNGSTER1 (13, 20) — _ViridianCityYoungster1Text
         {13, 20, {
-            L"어이! 허리에 차고 있는 그 몬스터볼!",
-            L"너 포켓몬을 가지고 있구나!",
-            L"언제 어디서나 포켓몬을 데리고 다닐 수 있다니 멋지지!",
+            L"소년: 어이! 허리에 차고 있는 그 몬스터볼!",
+            L"소년: 너 포켓몬을 가지고 있구나!",
+            L"소년: 언제 어디서나 포켓몬을 데리고 다닐 수 있다니 멋지지!",
             nullptr
         }, NPC_SPR_LITTLE_BOY},
 
         // pokered GAMBLER1 (30, 8) — _ViridianCityGambler1GymAlwaysClosedText
         // SPRITE_GAMBLER = 노인 → NPC_SPR_GRAMPS
         {30, 8, {
-            L"이 포켓몬 체육관은 항상 닫혀있어.",
-            L"도대체 관장이 누구일까?",
+            L"할아버지: 이 포켓몬 체육관은 항상 닫혀있어.",
+            L"할아버지: 도대체 관장이 누구일까?",
             nullptr
         }, NPC_SPR_GRAMPS},
 
         // pokered YOUNGSTER2 (30, 25) — _ViridianCityYoungster2YouWantToKnowAboutText
         {30, 25, {
-            L"쐐기벌레 포켓몬 2종류에 대해 알고 싶니?",
-            L"캐터피는 독이 없지만, 뿔충이는 독이 있어.",
-            L"뿔충이의 독침붕 공격을 조심해!",
+            L"소년: 쐐기벌레 포켓몬 2종류에 대해 알고 싶니?",
+            L"소년: 캐터피는 독이 없지만, 뿔충이는 독이 있어.",
+            L"소년: 뿔충이의 독침붕 공격을 조심해!",
             nullptr
         }, NPC_SPR_LITTLE_BOY},
 
         // pokered GIRL (17, 9) — _ViridianCityGirlHasntHadHisCoffeeYetText
         {17, 9, {
-            L"앗, 할아버지! 너무 그러지 마세요!",
-            L"할아버지는 아직 커피도 못 드셨거든요.",
+            L"소녀: 앗, 할아버지! 너무 그러지 마세요!",
+            L"소녀: 할아버지는 아직 커피도 못 드셨거든요.",
             nullptr
         }, NPC_SPR_LITTLE_GIRL},
 
         // pokered OLD_MAN_SLEEPY (18, 9) — _ViridianCityOldManSleepyPrivatePropertyText
         // SPRITE_GAMBLER_ASLEEP — NPC_SPR_GRAMPS 유지
         {18, 9, {
-            L"이쪽으로는 지나갈 수 없다!",
-            L"여기는 사유지란 말이다!",
+            L"할아버지: 이쪽으로는 지나갈 수 없다!",
+            L"할아버지: 여기는 사유지란 말이다!",
             nullptr
         }, NPC_SPR_GRAMPS},
 
         // pokered FISHER (6, 23) — ViridianCityFisherYouCanHaveThisText (드림이터 TM)
         {6, 23, {
-            L"하암~! 햇볕에 깜빡 졸았네. 슬리프가 꿈을 먹는 꿈을 꿨어.",
-            L"어라? 이 비전머신은 어디서 났지?",
-            L"왠지 으스스하군... 자, 너 가져라!",
+            L"낚시꾼: 하암~! 햇볕에 깜빡 졸았네. 슬리프가 꿈을 먹는 꿈을 꿨어.",
+            L"낚시꾼: 어라? 이 비전머신은 어디서 났지?",
+            L"낚시꾼: 왠지 으스스하군... 자, 너 가져라!",
             nullptr
         }, NPC_SPR_FISHER},
 
         // pokered OLD_MAN (17, 5) — _ViridianCityOldManHadMyCoffeeNowText (커피 영감님)
         // SPRITE_GAMBLER (걸어다님) — NPC_SPR_GRAMPS
         {17, 5, {
-            L"아하, 이제 커피를 마셨더니 기분이 좋군!",
-            L"그래, 지나가도 좋아!",
-            L"바쁜가? 시간이 곧 돈이지...",
+            L"할아버지: 아하, 이제 커피를 마셨더니 기분이 좋군!",
+            L"할아버지: 그래, 지나가도 좋아!",
+            L"할아버지: 바쁜가? 시간이 곧 돈이지...",
             nullptr
         }, NPC_SPR_GRAMPS},
     }, 8,  // npcs
@@ -543,13 +555,13 @@ inline MapDef MAP_4 = {
     {
         // 상록숲 일반 NPC
         {16, 43, {
-            L"포켓몬을 잡으러 왔어요!",
+            L"소년: 포켓몬을 잡으러 왔어요!",
             nullptr
         }, NPC_SPR_LITTLE_BOY},
 
         // 상록숲 일반 NPC 2
         {27, 40, {
-            L"오늘은 꼭 포켓몬을 잡을거야!",
+            L"소년: 오늘은 꼭 포켓몬을 잡을거야!",
             nullptr
         }, NPC_SPR_LITTLE_BOY},
 
@@ -687,30 +699,30 @@ inline MapDef MAP_5 = {
 
         // pokered PEWTERCITY_COOLTRAINER_F (8, 15) — _PewterCityCooltrainerFText
         {8, 15, {
-            L"소문에 따르면 픽시는 달에서 왔대요!",
-            L"문스톤이 달의돌산에 떨어진 후 나타났다고 하네요.",
+            L"연구생: 소문에 따르면 픽시는 달에서 왔대요!",
+            L"연구생: 문스톤이 달의돌산에 떨어진 후 나타났다고 하네요.",
             nullptr
         }, NPC_SPR_BRUNETTE},
 
         // pokered PEWTERCITY_COOLTRAINER_M (17, 25) — _PewterCityCooltrainerMText
         {17, 25, {
-            L"여기엔 진지한 포켓몬 트레이너가 별로 없어요.",
-            L"다들 벌레잡이 같은 풋내기들이죠.",
-            L"하지만 회색체육관의 브록은 정말 진심이라구요!",
+            L"연구생: 여기엔 진지한 포켓몬 트레이너가 별로 없어요.",
+            L"연구생: 다들 벌레잡이 같은 풋내기들이죠.",
+            L"연구생: 하지만 회색체육관의 브록은 정말 진심이라구요!",
             nullptr
         }, NPC_SPR_BRUNETTE},
 
         // pokered PEWTERCITY_SUPER_NERD1 (27, 17) — _PewterCitySuperNerd1ItsRightHereText
         {27, 17, {
-            L"박물관 들러봤어?",
-            L"바로 여기야! 입장료 내야 하지만 그만한 가치가 있다구!",
+            L"연구원: 박물관 들러봤어?",
+            L"연구원: 바로 여기야! 입장료 내야 하지만 그만한 가치가 있다구!",
             nullptr
         }, NPC_SPR_GENTLEMAN},
 
         // pokered PEWTERCITY_SUPER_NERD2 (26, 25) — _PewterCitySuperNerd2ImSprayingRepelText
         {26, 25, {
-            L"쉿! 내가 뭐 하는지 알아?",
-            L"리펠 뿌려서 정원에 포켓몬 못 오게 하는 거야!",
+            L"연구원: 쉿! 내가 뭐 하는지 알아?",
+            L"연구원: 리펠 뿌려서 정원에 포켓몬 못 오게 하는 거야!",
             nullptr
         }, NPC_SPR_GENTLEMAN},
     }, 5,  // npcs
@@ -753,23 +765,26 @@ inline MapDef MAP_6 = {
         nullptr
     },
     {
-        // 우측 카운터 위 (y=3, x=6,7,8) — 진짜 테이블 위에 몬스터볼 3개
-        {6, 3, {L"이상해씨의 몬스터볼이다.", L"오박사: 멋대로 만지면 안 돼!", nullptr}, NPC_SPR_POKE_BALL},
-        {7, 3, {L"파이리의 몬스터볼이다.",   L"오박사: 멋대로 만지면 안 돼!", nullptr}, NPC_SPR_POKE_BALL},
-        {8, 3, {L"꼬부기의 몬스터볼이다.",   L"오박사: 멋대로 만지면 안 돼!", nullptr}, NPC_SPR_POKE_BALL},
-        // 오박사 (책장 통로 아래쪽) — 대화 끝 → STARTER_TRIGGER
+        // 우측 카운터 위 (y=3, x=6,7,8) — 선택한 스타터 볼은 starterIdx로 숨김
+        {6, 3, {L"이상해씨의 몬스터볼이다.", L"오박사: 멋대로 만지면 안 돼!", nullptr},
+            NPC_SPR_POKE_BALL, 0, NPC_TAG_BALL_BULBASAUR},
+        {7, 3, {L"파이리의 몬스터볼이다.",   L"오박사: 멋대로 만지면 안 돼!", nullptr},
+            NPC_SPR_POKE_BALL, 0, NPC_TAG_BALL_CHARMANDER},
+        {8, 3, {L"꼬부기의 몬스터볼이다.",   L"오박사: 멋대로 만지면 안 돼!", nullptr},
+            NPC_SPR_POKE_BALL, 0, NPC_TAG_BALL_SQUIRTLE},
+        // 오박사 — partySize==0이면 STARTER_TRIGGER, 이후 소포 퀘스트 처리
         {5, 3, {
             L"오박사: 나에겐 연구에 쓰던 세 마리의 포켓몬이 있단다.",
             L"오박사: 테이블 위 몬스터볼 안에 있어.",
             L"오박사: 자, 어떤 녀석이 마음에 드니?",
             nullptr
-        }, NPC_SPR_OAK, 1},
-        // 블루 (라이벌, 중앙)
+        }, NPC_SPR_OAK, 1, NPC_TAG_OAK_LAB},
+        // 블루 — beatenRival1 후 대사 변경 → rivalLabTalked 되면 사라짐
         {4, 8, {
             L"블루: 야, 늦었잖아!",
             L"블루: 할아버지, 저도 한 마리 받을게요!",
             nullptr
-        }, NPC_SPR_BLUE},
+        }, NPC_SPR_BLUE, 0, NPC_TAG_BLUE_LAB},
         // 보조원 소녀 (왼쪽)
         {1, 9, {
             L"보조원: 안녕하세요!",
@@ -1069,11 +1084,11 @@ inline MapDef MAP_13 = {
         // 점원 — 카운터 (0,5) facing RIGHT — pokered ViridianMart_Object.asm
         // trigger=3 → 대화 끝 시 deliveredParcel=true (별도 씬 X)
         {0, 5, {
-            L"점원: 어서오세요!  오, 너 혹시 오박사님 심부름 왔니?",
-            L"잠시만, 여기 소포가 있단다.",
+            L"점원: 어서오세요! 오, 너 혹시 오박사님 심부름 왔니?",
+            L"점원: 잠시만, 여기 소포가 있단다.",
             L"[소포를 받았다!]  오박사님께 전해드려.",
             nullptr
-        }, NPC_SPR_CLERK, 3},
+        }, NPC_SPR_CLERK, 3, NPC_TAG_VIRIDIAN_CLERK},
     }, 1,  // npcs
     {}, 0,  // trainers
     {

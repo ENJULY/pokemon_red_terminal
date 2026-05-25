@@ -61,9 +61,53 @@ void Overworld::init() {
     state_.py    = pl_.y;
     state_.dir   = pl_.dir;
     state_.pendingEvent = OwEvent::NONE;
-    // 인트로 직후 깨어나는 시퀀스: justWokeUp 플래그가 켜져 있으면 wakeStep 1로 시작
-    if (pl_.justWokeUp) {
-        state_.wakeStep = 1;
+    if (pl_.justWokeUp) state_.wakeStep = 1;
+    useOverrideLines_ = false;
+    memset(overrideLines_, 0, sizeof(overrideLines_));
+}
+
+bool Overworld::isNpcHidden(const NpcDef& npc) const {
+    if (npc.tag == NPC_TAG_BALL_BULBASAUR  && pl_.starterIdx == 0) return true;
+    if (npc.tag == NPC_TAG_BALL_CHARMANDER && pl_.starterIdx == 1) return true;
+    if (npc.tag == NPC_TAG_BALL_SQUIRTLE   && pl_.starterIdx == 2) return true;
+    if (npc.tag == NPC_TAG_BLUE_LAB && pl_.rivalLabTalked)         return true;
+    return false;
+}
+
+void Overworld::startNpcDialog(const NpcDef* npc) {
+    state_.dialog.active  = true;
+    state_.dialog.npc     = npc;
+    state_.dialog.lineIdx = 0;
+    useOverrideLines_     = false;
+    memset(overrideLines_, 0, sizeof(overrideLines_));
+
+    if (npc->tag == NPC_TAG_OAK_LAB && pl_.partySize > 0) {
+        useOverrideLines_ = true;
+        if (pl_.gotParcel && !pl_.deliveredParcel) {
+            overrideLines_[0] = L"오박사: 이게 소포구나! 정말 고마워.";
+            overrideLines_[1] = L"오박사: 포켓몬 연구에 꼭 필요한 것이었단다.";
+            overrideLines_[2] = L"오박사: [소포를 전달했다!]";
+            overrideLines_[3] = nullptr;
+        } else if (pl_.deliveredParcel) {
+            overrideLines_[0] = L"오박사: 포켓몬 연구에 전념하고 있단다.";
+            overrideLines_[1] = L"오박사: 힘껏 모험해!";
+            overrideLines_[2] = nullptr;
+        } else {
+            overrideLines_[0] = L"오박사: 포켓몬과 함께 좋은 여행이 되길 바란다!";
+            overrideLines_[1] = nullptr;
+        }
+    }
+    if (npc->tag == NPC_TAG_BLUE_LAB && pl_.beatenRival1 && !pl_.rivalLabTalked) {
+        useOverrideLines_ = true;
+        overrideLines_[0] = L"블루: 으윽... 운이 좋았던 거야.";
+        overrideLines_[1] = L"블루: 다음엔 꼭 이길 거야!";
+        overrideLines_[2] = nullptr;
+    }
+    if (npc->tag == NPC_TAG_VIRIDIAN_CLERK && pl_.gotParcel) {
+        useOverrideLines_ = true;
+        overrideLines_[0] = L"점원: 어서오세요!";
+        overrideLines_[1] = L"점원: 필요한 게 있으면 말씀해 주세요.";
+        overrideLines_[2] = nullptr;
     }
 }
 
@@ -509,28 +553,32 @@ void Overworld::update(Key key) {
         if (key == Key::A || key == Key::B) {
             state_.dialog.lineIdx++;
             const NpcDef* npc = state_.dialog.npc;
-            if (state_.dialog.lineIdx >= 4 || !npc->lines[state_.dialog.lineIdx]) {
-                state_.dialog.active = false;
+            const wchar_t* curLine = useOverrideLines_
+                ? overrideLines_[state_.dialog.lineIdx]
+                : (state_.dialog.lineIdx < 4 ? npc->lines[state_.dialog.lineIdx] : nullptr);
+            if (state_.dialog.lineIdx >= 4 || !curLine) {
+                state_.dialog.active  = false;
+                useOverrideLines_     = false;
 
-                // NPC trigger 처리 (예: 오박사 → STARTER_TRIGGER)
-                if (npc->trigger == 1) {
+                // STARTER_TRIGGER: partySize==0일 때만
+                if (npc->trigger == 1 && pl_.partySize == 0) {
                     state_.pendingEvent = OwEvent::STARTER_TRIGGER;
                 }
-                // 간호사 조이 → NURSE_HEAL
                 if (npc->trigger == 2) {
                     state_.pendingEvent = OwEvent::NURSE_HEAL;
                 }
-                // 상록 마트 점원 → 소포 받음 (대화창 안에서 처리, 별도 씬 X)
-                if (npc->trigger == 3 && state_.mapId == MAP_VIRIDIAN_MART &&
-                    !pl_.deliveredParcel) {
-                    pl_.deliveredParcel = true;
+                // 소포 수령 (gotParcel)
+                if (npc->trigger == 3 && state_.mapId == MAP_VIRIDIAN_MART && !pl_.gotParcel) {
+                    pl_.gotParcel = true;
                 }
-
-                // 상록시티 첫 NPC (소포 배달) 이벤트
-                if (state_.mapId == MAP_VIRIDIAN && npc->x == 3 && npc->y == 7) {
-                    if (!pl_.deliveredParcel) {
-                        // 마트에서 소포를 받아오게 트리거는 마트 진입 시 처리
-                    }
+                // 오박사 소포 전달 완료
+                if (npc->tag == NPC_TAG_OAK_LAB && pl_.gotParcel && !pl_.deliveredParcel) {
+                    pl_.deliveredParcel = true;
+                    // 퀘스트 보상 연동 위치 — ITEM_SYSTEM_INTEGRATION.md 참고
+                }
+                // 블루 배틀 후 대화 완료 → 연구소에서 사라짐
+                if (npc->tag == NPC_TAG_BLUE_LAB && pl_.beatenRival1 && !pl_.rivalLabTalked) {
+                    pl_.rivalLabTalked = true;
                 }
             }
         }
@@ -562,22 +610,18 @@ void Overworld::update(Key key) {
             bool talked = false;
             for (int i = 0; i < m->numNpcs; i++) {
                 if (m->npcs[i].x == fx && m->npcs[i].y == fy) {
-                    state_.dialog.active = true;
-                    state_.dialog.npc = &m->npcs[i];
-                    state_.dialog.lineIdx = 0;
+                    if (isNpcHidden(m->npcs[i])) break;
+                    startNpcDialog(&m->npcs[i]);
                     talked = true;
                     break;
                 }
             }
-            // 카운터 너머 대화: 1칸 앞이 unwalkable 이면 2칸 앞 NPC 체크
-            // (pokered 의 talk-through-counter 동작 — 간호사 조이, 마트 점원 등)
             if (!talked && !tileWalkable(getTile(m, fx, fy), state_.mapId)) {
                 int fx2 = fx + dfx, fy2 = fy + dfy;
                 for (int i = 0; i < m->numNpcs; i++) {
                     if (m->npcs[i].x == fx2 && m->npcs[i].y == fy2) {
-                        state_.dialog.active = true;
-                        state_.dialog.npc = &m->npcs[i];
-                        state_.dialog.lineIdx = 0;
+                        if (isNpcHidden(m->npcs[i])) break;
+                        startNpcDialog(&m->npcs[i]);
                         talked = true;
                         break;
                     }
@@ -686,8 +730,10 @@ void Overworld::renderKorean() {
                         tile_char = '!';
                     for (int i = 0; i < m->numNpcs; i++)
                         if (m->npcs[i].x == mx && m->npcs[i].y == my) {
-                            isNpc = true;
-                            npcSpriteId = m->npcs[i].spriteId;
+                            if (!isNpcHidden(m->npcs[i])) {
+                                isNpc = true;
+                                npcSpriteId = m->npcs[i].spriteId;
+                            }
                             break;
                         }
                     for (int i = 0; i < m->numTrainers; i++)
@@ -858,8 +904,11 @@ void Overworld::renderKorean() {
     if (state_.dialog.active && state_.dialog.npc) {
         const NpcDef* npc = state_.dialog.npc;
         int li = state_.dialog.lineIdx;
-        if (li < 4 && npc->lines[li]) {
-            ren_.printW(2, boxY + 2, npc->lines[li],
+        const wchar_t* line = useOverrideLines_
+            ? (li < 4 ? overrideLines_[li] : nullptr)
+            : (li < 4 ? npc->lines[li] : nullptr);
+        if (line) {
+            ren_.printW(2, boxY + 2, line,
                 std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
         }
         ren_.printW(2, boxY + 4, L"[ Z: 다음 ]",
@@ -869,6 +918,8 @@ void Overworld::renderKorean() {
 
     // 조작 안내
     ren_.printW(2, boxY + 2, L"방향키: 이동  Z: 상호작용",
+        std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+    ren_.printW(W - 14, boxY + 2, L"[ M: 메뉴 ]",
         std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
 
     // 파티 상태 (우측 상단)
