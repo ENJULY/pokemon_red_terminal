@@ -25,6 +25,14 @@ enum class Scene {
     GAME_OVER,          // 전멸
     ENDING,             // 브록 클리어 엔딩
     WARP_MENU,          // 디버그: Ctrl+M 워프 메뉴
+    INGAME_MENU,        // M 키 — 인게임 메뉴
+};
+
+enum class InGameMenuState {
+    TOP_LEVEL,    // 최상위 (포켓몬/아이템/저장)
+    PARTY_VIEW,   // 파티 목록
+    PARTY_DETAIL, // 포켓몬 상세
+    ITEM_STUB,    // 가방 — 아이템 시스템 연동 전 스텁
 };
 
 class Game {
@@ -48,7 +56,6 @@ private:
     void renderKorean();
 
     // ─── 인트로 ───
-    // 0~4: 나레이션, 5: 레드 이름 확인, 6~8: 라이벌 소개, 9~11: 마무리 → OVERWORLD
     static const int INTRO_COUNT = 12;
     static const wchar_t* INTRO_LINES[INTRO_COUNT];
     int  introStep_     = 0;
@@ -83,8 +90,7 @@ private:
     // ─── 라이벌 배틀 ───
     bool rivalBattleInit_ = false;
 
-    // ─── 라이벌 인터셉트 (스타터 받고 출구 향할 때 블루가 가로막음) ───
-    // pokered _OaksLabRivalIllTakeYouOnText 기반.
+    // ─── 라이벌 인터셉트 ───
     static const int RIVAL_INTERCEPT_COUNT = 4;
     static const wchar_t* RIVAL_INTERCEPT_LINES[RIVAL_INTERCEPT_COUNT];
     int rivalInterceptStep_ = 0;
@@ -92,10 +98,7 @@ private:
     void renderRivalIntercept();
     void renderRivalInterceptKorean();
 
-    // ─── 오박사 인터셉트 시퀀스 ───
-    // 0~3: 풀숲에서 오박사 등장 + 대사 (오박사 풀바디)
-    // 4:   "...오박사를 따라 연구소로 갔다..." 전환
-    // 종료 후 → 연구소 OVERWORLD로 진입. NPC들과 직접 상호작용.
+    // ─── 연구소 인트로 ───
     static const int LAB_INTRO_COUNT = 5;
     static const wchar_t* LAB_INTRO_LINES[LAB_INTRO_COUNT];
     int labIntroStep_ = 0;
@@ -133,6 +136,18 @@ private:
     int warpCursor_ = 0;
     void updateWarpMenu(Key key);
     void renderWarpMenuKorean();
+
+    // ─── 인게임 메뉴 (M 키) ───
+    Scene           prevScene_        = Scene::OVERWORLD;
+    InGameMenuState menuState_        = InGameMenuState::TOP_LEVEL;
+    int             menuCursor_       = 0;
+    int             partyMenuCursor_  = 0;
+    int             detailPartyIdx_   = 0;
+    bool            menuSaveMsg_      = false;
+    int             menuSaveMsgTimer_ = 0;
+    void updateInGameMenu(Key key);
+    void renderInGameMenu();
+    void renderInGameMenuKorean();
 
     // ─── 엔딩 ───
     int endingStep_ = 0;

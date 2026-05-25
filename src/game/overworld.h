@@ -101,11 +101,17 @@ private:
     Player&   pl_;
     OwState   state_;
 
+    // NPC 동적 대화 오버라이드 (Oak/Blue/Clerk 조건부 대사)
+    const wchar_t* overrideLines_[4];
+    bool           useOverrideLines_ = false;
+
     void tryMove(int dx, int dy);
     bool checkTrainerSight();
     void checkWarps(int x, int y);
     void checkSpecialTiles(int x, int y);
     void triggerEncounter();
+    bool isNpcHidden(const NpcDef& npc) const;
+    void startNpcDialog(const NpcDef* npc);
 
     // OW cutscene
     bool cutsceneActive() const;

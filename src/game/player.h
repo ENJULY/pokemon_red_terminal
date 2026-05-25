@@ -2,7 +2,6 @@
 #include "../data/pokemon_data.h"
 #include <cstring>
 
-// ─── 포켓몬 인스턴스 ─────────────────────────────────────────
 struct PokemonMove {
     int moveId;
     int pp;
@@ -16,11 +15,9 @@ struct Pokemon {
     PokemonMove moves[4];
     int  numMoves;
     int  exp;
-    // 스테이터스 변화 스테이지 (-6 ~ +6)
-    int  atkStage, defStage, speStage, accStage;
+    int  atkStage, defStage, speStage, accStage; // 스테이지 -6~+6
 };
 
-// ─── 플레이어 ────────────────────────────────────────────────
 struct Player {
     wchar_t name[16];
     wchar_t rivalName[16];
@@ -34,26 +31,24 @@ struct Player {
     int superpotions;
     bool hasPokedex;
 
-    // 스토리 플래그
-    bool beatenRival1;       // 연구소 라이벌 배틀
-    bool deliveredParcel;    // 상록시티 심부름
-    bool beatenGymTrainer1;  // 체육관 트레이너1
-    bool beatenGymTrainer2;  // 체육관 트레이너2
-    bool beatenBrock;        // 브록 클리어
+    bool beatenRival1;
+    bool gotParcel;       // 상록 마트에서 소포 수령
+    bool deliveredParcel; // 오박사에게 소포 전달
+    bool beatenGymTrainer1;
+    bool beatenGymTrainer2;
+    bool beatenBrock;
+    int  starterIdx;      // 선택한 스타터 인덱스 (0=이상해씨 1=파이리 2=꼬부기, -1=미선택)
+    bool rivalLabTalked;  // beatenRival1 후 연구소 블루와 대화 완료
 
-    // 위치
     int mapId;
     int x, y;
     int dir; // 0=아래 1=위 2=왼 3=오른
 
-    // 포켓몬센터 치료 여부 (상록시티 등)
     bool viridianHealed;
     bool pewterHealed;
-
-    // 인트로 직후 침실에서 깨어나는 시퀀스 트리거
     bool justWokeUp;
 
-    // 풀베기로 베어낸 나무 위치 기록 (최대 16개) — 게임 재시작 시 리셋됨
+    // 풀베기로 베어낸 나무 위치 — 게임 재시작 시 리셋
     static constexpr int MAX_CUT_TREES = 16;
     int  cutTreeMapId[MAX_CUT_TREES];
     int  cutTreeX[MAX_CUT_TREES];
@@ -61,10 +56,8 @@ struct Player {
     int  cutTreeCount;
 };
 
-// 풀베기(Cut) move ID 상수
 static constexpr int MOVE_CUT = 18;
 
-// 파티에 풀베기를 아는 포켓몬이 있는지 확인
 inline bool playerHasCut(const Player& pl) {
     for (int i = 0; i < pl.partySize; i++) {
         const Pokemon& p = pl.party[i];
@@ -76,7 +69,6 @@ inline bool playerHasCut(const Player& pl) {
     return false;
 }
 
-// (mapId, x, y) 위치의 풀베기 나무가 이미 베어졌는지 확인
 inline bool isTreeCut(const Player& pl, int mapId, int x, int y) {
     for (int i = 0; i < pl.cutTreeCount; i++) {
         if (pl.cutTreeMapId[i] == mapId && pl.cutTreeX[i] == x && pl.cutTreeY[i] == y)
@@ -85,7 +77,6 @@ inline bool isTreeCut(const Player& pl, int mapId, int x, int y) {
     return false;
 }
 
-// 베어낸 나무 위치 등록
 inline bool addCutTree(Player& pl, int mapId, int x, int y) {
     if (pl.cutTreeCount >= Player::MAX_CUT_TREES) return false;
     pl.cutTreeMapId[pl.cutTreeCount] = mapId;
@@ -95,7 +86,6 @@ inline bool addCutTree(Player& pl, int mapId, int x, int y) {
     return true;
 }
 
-// ─── 포켓몬 생성 ─────────────────────────────────────────────
 inline void recalcStats(Pokemon& p) {
     if (!p.species) return;
     p.maxHP  = calcHP  (p.species->baseHP,  p.level);
@@ -115,7 +105,6 @@ inline Pokemon makePokemon(int speciesId, int level) {
     p.exp = expForLevel(level);
     p.atkStage = p.defStage = p.speStage = p.accStage = 0;
 
-    // 초기 기술
     p.numMoves = 0;
     for (int i = 0; i < 4 && p.species->startMoves[i] != 0; i++) {
         int mid = p.species->startMoves[i];
@@ -123,12 +112,10 @@ inline Pokemon makePokemon(int speciesId, int level) {
         p.moves[p.numMoves].pp     = getMoveData(mid).maxPP;
         p.numMoves++;
     }
-    // 레벨업 기술 적용
     for (int i = 0; i < 8; i++) {
         const LearnMove& lm = p.species->learnset[i];
         if (lm.level == 0) break;
         if (lm.level <= level && p.numMoves < 4) {
-            // 이미 있으면 스킵
             bool exists = false;
             for (int j = 0; j < p.numMoves; j++)
                 if (p.moves[j].moveId == lm.moveId) { exists = true; break; }
@@ -152,7 +139,6 @@ inline bool allFainted(const Player& pl) {
     return pl.partySize > 0;
 }
 
-// 첫 번째 살아있는 포켓몬 인덱스
 inline int firstAlive(const Player& pl) {
     for (int i = 0; i < pl.partySize; i++)
         if (!pokemonFainted(pl.party[i])) return i;
