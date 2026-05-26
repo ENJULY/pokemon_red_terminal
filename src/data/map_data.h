@@ -308,12 +308,15 @@ inline MapDef MAP_2 = {
             nullptr
         }, NPC_SPR_LITTLE_BOY},
 
+        // pokered GAMBLER1 (30, 8) — _ViridianCityGambler1GymAlwaysClosedText
+        // SPRITE_GAMBLER = 노인 → NPC_SPR_GRAMPS
         {30, 8, {
             L"할아버지: 이 포켓몬 체육관은 항상 닫혀있어.",
             L"할아버지: 도대체 관장이 누구일까?",
             nullptr
         }, NPC_SPR_GRAMPS},
 
+        // pokered YOUNGSTER2 (30, 25) — _ViridianCityYoungster2YouWantToKnowAboutText
         {30, 25, {
             L"소년: 쐐기벌레 포켓몬 2종류에 대해 알고 싶니?",
             L"소년: 캐터피는 독이 없지만, 뿔충이는 독이 있어.",
@@ -321,18 +324,22 @@ inline MapDef MAP_2 = {
             nullptr
         }, NPC_SPR_LITTLE_BOY},
 
+        // pokered GIRL (17, 9) — _ViridianCityGirlHasntHadHisCoffeeYetText
         {17, 9, {
             L"소녀: 앗, 할아버지! 너무 그러지 마세요!",
             L"소녀: 할아버지는 아직 커피도 못 드셨거든요.",
             nullptr
         }, NPC_SPR_LITTLE_GIRL},
 
+        // pokered OLD_MAN_SLEEPY (18, 9) — _ViridianCityOldManSleepyPrivatePropertyText
+        // SPRITE_GAMBLER_ASLEEP — NPC_SPR_GRAMPS 유지
         {18, 9, {
             L"할아버지: 이쪽으로는 지나갈 수 없다!",
             L"할아버지: 여기는 사유지란 말이다!",
             nullptr
         }, NPC_SPR_GRAMPS},
 
+        // pokered FISHER (6, 23) — ViridianCityFisherYouCanHaveThisText (드림이터 TM)
         {6, 23, {
             L"낚시꾼: 하암~! 햇볕에 깜빡 졸았네. 슬리프가 꿈을 먹는 꿈을 꿨어.",
             L"낚시꾼: 어라? 이 비전머신은 어디서 났지?",
@@ -340,6 +347,8 @@ inline MapDef MAP_2 = {
             nullptr
         }, NPC_SPR_FISHER},
 
+        // pokered OLD_MAN (17, 5) — _ViridianCityOldManHadMyCoffeeNowText (커피 영감님)
+        // SPRITE_GAMBLER (걸어다님) — NPC_SPR_GRAMPS
         {17, 5, {
             L"할아버지: 아하, 이제 커피를 마셨더니 기분이 좋군!",
             L"할아버지: 그래, 지나가도 좋아!",
@@ -550,6 +559,7 @@ inline MapDef MAP_4 = {
             nullptr
         }, NPC_SPR_LITTLE_BOY},
 
+        // 상록숲 일반 NPC 2
         {27, 40, {
             L"소년: 오늘은 꼭 포켓몬을 잡을거야!",
             nullptr
@@ -694,6 +704,7 @@ inline MapDef MAP_5 = {
             nullptr
         }, NPC_SPR_BRUNETTE},
 
+        // pokered PEWTERCITY_COOLTRAINER_M (17, 25) — _PewterCityCooltrainerMText
         {17, 25, {
             L"연구생: 여기엔 진지한 포켓몬 트레이너가 별로 없어요.",
             L"연구생: 다들 벌레잡이 같은 풋내기들이죠.",
@@ -701,12 +712,14 @@ inline MapDef MAP_5 = {
             nullptr
         }, NPC_SPR_BRUNETTE},
 
+        // pokered PEWTERCITY_SUPER_NERD1 (27, 17) — _PewterCitySuperNerd1ItsRightHereText
         {27, 17, {
             L"연구원: 박물관 들러봤어?",
             L"연구원: 바로 여기야! 입장료 내야 하지만 그만한 가치가 있다구!",
             nullptr
         }, NPC_SPR_GENTLEMAN},
 
+        // pokered PEWTERCITY_SUPER_NERD2 (26, 25) — _PewterCitySuperNerd2ImSprayingRepelText
         {26, 25, {
             L"연구원: 쉿! 내가 뭐 하는지 알아?",
             L"연구원: 리펠 뿌려서 정원에 포켓몬 못 오게 하는 거야!",
@@ -908,9 +921,9 @@ inline MapDef MAP_8 = {
             {74, 19, 0},   // 꼬마돌, 꼬렛
             {11, 11, 0},
             false,
-            NPC_SPR_BRUNETTE,   // OW: COOLTRAINER_M 대체
-            5,                  // intro: COOLTRAINER_M
-            false               // isBoss
+            NPC_SPR_COOLTRAINER_M,  // OW: 주니어 트레이너
+            5,                      // intro: COOLTRAINER_M
+            false                   // isBoss
         },
         // BROCK (4,1) facing DOWN, sightRange 10 — 보스. 파티는 startBrock()에서 하드코딩(꼬마돌12+롱스톤14).
         // pokered _PewterGymBrockPreBattleText 요약. 승리 시 player_.beatenBrock=true → ENDING.
@@ -920,8 +933,8 @@ inline MapDef MAP_8 = {
             {74, 95, 0},   // 꼬마돌, 롱스톤 (참고용 — startBrock이 덮어씀)
             {12, 14, 0},
             false,
-            NPC_SPR_BRUNETTE,   // OW: SUPER_NERD 대체
-            3,                  // intro: BROCK
+            NPC_SPR_SUPER_NERD,     // OW: 체육관 관장(브록)
+            3,                      // intro: BROCK
             true                // isBoss → BOSS_BATTLE
         },
     }, 2,  // trainers

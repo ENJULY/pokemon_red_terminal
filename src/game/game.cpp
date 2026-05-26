@@ -221,11 +221,12 @@ void Game::update(Key key) {
                 }
 
                 if (!won && res == BattleResult::LOSE) {
+                    // 전멸 → 엄마 집 1F 으로 (원본 동작). 엄마(5,4) 바로 위에 등장 → 아래 보면 엄마.
                     healAll(player_);
                     player_.mapId = MAP_PLAYER_HOUSE;
                     player_.x = 5; player_.y = 3;
-                    player_.dir = 0;
-                    if (ow_) ow_->init();
+                    player_.dir = 0;            // 아래 = 엄마 향함
+                    if (ow_) ow_->init();       // state_ ← player_ 동기화
                     changeScene(Scene::GAME_OVER);
                 } else if (!player_.beatenRival1 && won) {
                     player_.beatenRival1 = true;
@@ -328,7 +329,7 @@ static const WarpMenuEntry WARP_MAPS[] = {
     {5,  20, 30, L"회색시티"},
     {6,  5,  10, L"오박사 연구소"},
     {7,  3,  6,  L"주인공의 집 1F"},
-    {8,  4,  10, L"회색시티 체육관"},
+    {8,  4,  12, L"회색시티 체육관"},
     {9,  3,  6,  L"주인공의 방 2F"},
     {10, 3,  6,  L"라이벌의 집"},
     {11, 3,  7,  L"상록 포센"},
