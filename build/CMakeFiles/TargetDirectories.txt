@@ -1,0 +1,3 @@
+C:/Users/han06/Downloads/pokemon/pokemon_red_terminal/build/CMakeFiles/PokemonRed.dir
+C:/Users/han06/Downloads/pokemon/pokemon_red_terminal/build/CMakeFiles/edit_cache.dir
+C:/Users/han06/Downloads/pokemon/pokemon_red_terminal/build/CMakeFiles/rebuild_cache.dir

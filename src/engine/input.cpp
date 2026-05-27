@@ -12,6 +12,7 @@ static Key vkToKey(WORD vk) {
         case VK_BACK:            return Key::B;
         case VK_SPACE:           return Key::START;
         case VK_ESCAPE:          return Key::ESCAPE;
+        case 'M':                return Key::MENU;
         default:                 return Key::UNKNOWN;
     }
 }
@@ -28,12 +29,12 @@ char Input::pollChar() {
     PeekConsoleInputA(hIn, &rec, 1, &read);
     if (read == 0) return 0;
     if (rec.EventType != KEY_EVENT || !rec.Event.KeyEvent.bKeyDown) {
-        ReadConsoleInputA(hIn, &rec, 1, &read); // consume non-key event
+        ReadConsoleInputA(hIn, &rec, 1, &read);
         return 0;
     }
     WORD vk = rec.Event.KeyEvent.wVirtualKeyCode;
     char ch = rec.Event.KeyEvent.uChar.AsciiChar;
-    ReadConsoleInputA(hIn, &rec, 1, &read); // consume
+    ReadConsoleInputA(hIn, &rec, 1, &read);
 
     if (vk == VK_BACK)   return 8;
     if (vk == VK_RETURN) return 13;
@@ -44,21 +45,15 @@ char Input::pollChar() {
 
 Key Input::poll() {
     HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
-
-    // 입력 이벤트 수 확인
     DWORD numEvents = 0;
     GetNumberOfConsoleInputEvents(hIn, &numEvents);
     if (numEvents == 0) return Key::NONE;
 
-    // 이벤트 읽기
     INPUT_RECORD rec;
     DWORD read = 0;
     ReadConsoleInputA(hIn, &rec, 1, &read);
     if (read == 0) return Key::NONE;
-
-    // 키 누름 이벤트만 처리 (키 뗌 무시)
-    if (rec.EventType != KEY_EVENT) return Key::NONE;
-    if (!rec.Event.KeyEvent.bKeyDown) return Key::NONE;
+    if (rec.EventType != KEY_EVENT || !rec.Event.KeyEvent.bKeyDown) return Key::NONE;
 
     WORD vk = rec.Event.KeyEvent.wVirtualKeyCode;
     DWORD ctrlState = rec.Event.KeyEvent.dwControlKeyState;
