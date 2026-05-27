@@ -362,10 +362,14 @@ void Battle::update(Key key) {
                         break;
                     }
                     removeItem(pl_, ITEM_POKE_BALL, 1);
-                    int catchRate = 50 + (en.maxHP - en.currentHP) * 100 / en.maxHP;
+                    // 풀HP 30%, 반HP 70%, 25%HP 80%, 빈사 90%
+                    int pct = (en.maxHP - en.currentHP) * 100 / en.maxHP;
+                    int catchRate = (pct <= 50)
+                        ? 30 + pct * 40 / 50
+                        : 70 + (pct - 50) * 20 / 50;
                     if (rand() % 100 < catchRate && pl_.partySize < 6) {
                         pl_.party[pl_.partySize++] = en;
-                        pl_.party[pl_.partySize-1].currentHP = pl_.party[pl_.partySize-1].maxHP;
+                        // HP는 잡힌 상태 그대로 유지 (포켓몬센터에서 회복)
                         swprintf(state_.msg, 128, L"%ls을(를) 잡았다!", en.species->name);
                         state_.msg2[0] = 0;
                         state_.phase = BattlePhase::SHOW_MSG;
@@ -376,6 +380,10 @@ void Battle::update(Key key) {
                         state_.msg2[0] = 0;
                         state_.phase = BattlePhase::SHOW_MSG;
                         state_.awaitKey = true;
+                        // 포획 실패 = 턴 소모 → SHOW_MSG 후 적 공격
+                        state_.turnStarted    = true;
+                        state_.playerFirst    = true;
+                        state_.enemyWentFirst = false;
                     }
                 } else if (id == ITEM_POTION) {
                     state_.itemMode = 1;
@@ -426,6 +434,10 @@ void Battle::update(Key key) {
                 state_.awaitKey = true;
                 state_.itemMode = 0;
                 state_.cursor = 0;
+                // 상처약 사용 = 턴 소모 → SHOW_MSG 후 적 공격
+                state_.turnStarted    = true;
+                state_.playerFirst    = true;
+                state_.enemyWentFirst = false;
             }
         }
         break;

@@ -62,6 +62,11 @@ struct Player {
     bool pewterHealed;
     bool justWokeUp;
 
+    // 전멸 시 돌아갈 위치 (마지막 회복 지점) — 원본 wLastBlackoutMap 대응
+    int  lastBlackoutMapId;
+    int  lastBlackoutX, lastBlackoutY;
+    int  lastBlackoutDir;
+
     // 풀베기로 베어낸 나무 위치 — 게임 재시작 시 리셋
     static constexpr int MAX_CUT_TREES = 16;
     int  cutTreeMapId[MAX_CUT_TREES];
@@ -239,6 +244,13 @@ inline bool removeItem(Player& pl, ItemId id, int count) {
         pl.bagSize--;
     }
     return true;
+}
+
+inline void recordBlackoutPoint(Player& pl) {
+    pl.lastBlackoutMapId = pl.mapId;
+    pl.lastBlackoutX     = pl.x;
+    pl.lastBlackoutY     = pl.y;
+    pl.lastBlackoutDir   = pl.dir;
 }
 
 inline void healAll(Player& pl) {

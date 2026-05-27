@@ -63,6 +63,11 @@ Game::Game() {
     player_.money = 3000;
     player_.hasPokedex = false;
     player_.starterIdx = -1;
+    // 첫 게임 시작 — blackout 시 주인공 집으로
+    player_.lastBlackoutMapId = MAP_PLAYER_HOUSE;
+    player_.lastBlackoutX     = 5;
+    player_.lastBlackoutY     = 3;
+    player_.lastBlackoutDir   = 0;
 
     battle_ = nullptr;
     ow_     = nullptr;
@@ -161,6 +166,7 @@ void Game::update(Key key) {
             break;
         case OwEvent::NURSE_HEAL:
             healAll(player_);
+            recordBlackoutPoint(player_);
             break;
         case OwEvent::ENTER_MART:
             if (!player_.gotParcel) {
@@ -247,14 +253,18 @@ void Game::update(Key key) {
                 }
 
                 if (!won && res == BattleResult::LOSE) {
-                    // 전멸 → 엄마 집 1F 으로 (원본 동작). 엄마(5,4) 바로 위에 등장 → 아래 보면 엄마.
+                    // 전멸 → 마지막 회복 지점(포켓몬센터/주인공집)으로 + 돈 절반 (원본 동작)
                     healAll(player_);
-                    player_.mapId = MAP_PLAYER_HOUSE;
-                    player_.x = 5; player_.y = 3;
-                    player_.dir = 0;            // 아래 = 엄마 향함
-                    if (ow_) ow_->init();       // state_ ← player_ 동기화
+                    player_.money /= 2;
+                    player_.mapId = player_.lastBlackoutMapId;
+                    player_.x     = player_.lastBlackoutX;
+                    player_.y     = player_.lastBlackoutY;
+                    player_.dir   = player_.lastBlackoutDir;
+                    if (ow_) ow_->init();
                     changeScene(Scene::GAME_OVER);
-                } else if (!player_.beatenRival1 && won) {
+                } else if (!player_.beatenRival1 && won && scene_ == Scene::TRAINER_BATTLE) {
+                    // 라이벌 첫 배틀 격파 → 포켓덱스 수령
+                    // (야생 포획도 WIN 결과지만 WILD_BATTLE 씬이라 여기 안 들어옴)
                     player_.beatenRival1 = true;
                     dexStep_ = 0;
                     changeScene(Scene::RECEIVE_DEX);
@@ -882,6 +892,7 @@ void Game::updateCenter(Key key) {
             centerStep_++;
         } else if (centerStep_ == 1) {
             healAll(player_);
+            recordBlackoutPoint(player_);
             centerStep_++;
         } else {
             if (ow_) ow_->onReturnFromCenter();
