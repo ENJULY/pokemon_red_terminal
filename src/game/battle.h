@@ -59,6 +59,7 @@ struct BattleState {
     bool         enemyWentFirst;   // static 제거 → 인스턴스 멤버
     bool         switchAfterFaint; // 기절 후 강제 교체 여부
 
+    int          itemMode;              // CHOOSE_ITEM 서브상태: 0=아이템선택, 1=상처약 파티 대상 선택
     int          frame;
     int          transitionFrame;       // INTRO_TRANSITION 카운트다운
     bool         turnStarted;           // CHOOSE_MOVE에서 행동 결정됐는가 (false면 SHOW_MSG는 인사 메시지)

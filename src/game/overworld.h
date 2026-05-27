@@ -12,7 +12,8 @@ enum class OwEvent {
     BOSS_BATTLE,      // 브록
     NPC_TALK,         // NPC 대화
     ENTER_POKEMON_CENTER, // 포켓몬센터
-    ENTER_MART,       // 마트 (소포 이벤트)
+    ENTER_MART,       // 마트 (소포 이벤트, 상록시티 첫 방문)
+    ENTER_MART_SHOP,  // 마트 상점 — eventData=martId
     GAME_WON,         // 브록 클리어 후
     OAK_INTERCEPT,    // 팔레트시티 북쪽 진입 → 오박사 등장 (cutscene)
     STARTER_TRIGGER,  // 연구소 오박사 NPC 대화 끝 → 스타터 선택

@@ -59,7 +59,8 @@ Game::Game() {
     player_.mapId = MAP_PALLET;
     player_.x = 11; player_.y = 7;
     player_.dir = 0;
-    player_.pokeballs = 0;
+    player_.bagSize = 0;
+    player_.money = 3000;
     player_.hasPokedex = false;
     player_.starterIdx = -1;
 
@@ -167,6 +168,15 @@ void Game::update(Key key) {
                 martStep_ = 0;
             }
             break;
+        case OwEvent::ENTER_MART_SHOP:
+            shopMartId_   = ow_ ? ow_->eventData() : 0;
+            shopCursor_   = 0;
+            shopMode_     = 0;
+            shopQuantity_ = 1;
+            shopMsg_      = nullptr;
+            shopMsgTimer_ = 0;
+            changeScene(Scene::MART_SHOP);
+            break;
         case OwEvent::OAK_INTERCEPT:
             if (ow_) ow_->startOakIntercept();
             break;
@@ -205,6 +215,18 @@ void Game::update(Key key) {
 
                 if (scene_ == Scene::BOSS_BATTLE && won) {
                     player_.beatenBrock = true;
+                    // 보스 상금 — TrainerDef에서 가져옴 (없으면 1000)
+                    MapDef* mBoss = getMap(player_.mapId);
+                    int bossPrize = 1000;
+                    if (mBoss) {
+                        int idx = ow_ ? ow_->eventData() : -1;
+                        if (idx >= 0 && idx < mBoss->numTrainers) {
+                            const TrainerDef& tr = mBoss->trainers[idx];
+                            if (tr.prize > 0) bossPrize = tr.prize;
+                            const_cast<TrainerDef&>(tr).defeated = true;
+                        }
+                    }
+                    player_.money += bossPrize;
                     changeScene(Scene::ENDING);
                     endingStep_ = 0;
                     delete battle_; battle_ = nullptr;
@@ -215,8 +237,12 @@ void Game::update(Key key) {
                     MapDef* m = getMap(player_.mapId);
                     if (m) {
                         int idx = ow_ ? ow_->eventData() : -1;
-                        if (idx >= 0 && idx < m->numTrainers)
-                            const_cast<TrainerDef&>(m->trainers[idx]).defeated = true;
+                        if (idx >= 0 && idx < m->numTrainers) {
+                            const TrainerDef& tr = m->trainers[idx];
+                            int prize = tr.prize > 0 ? tr.prize : 100;
+                            player_.money += prize;
+                            const_cast<TrainerDef&>(tr).defeated = true;
+                        }
                     }
                 }
 
@@ -249,6 +275,9 @@ void Game::update(Key key) {
         break;
     case Scene::MART_EVENT:
         updateMart(key);
+        break;
+    case Scene::MART_SHOP:
+        updateMartShop(key);
         break;
     case Scene::GAME_OVER:
         updateGameOver(key);
@@ -285,6 +314,7 @@ void Game::render() {
         break;
     case Scene::POKEMON_CENTER: renderCenter();         break;
     case Scene::MART_EVENT:     renderMart();           break;
+    case Scene::MART_SHOP:      renderMartShop();       break;
     case Scene::GAME_OVER:      renderGameOver();       break;
     case Scene::ENDING:         renderEnding();         break;
     case Scene::INGAME_MENU:    renderInGameMenu();     break;
@@ -311,6 +341,7 @@ void Game::renderKorean() {
         break;
     case Scene::POKEMON_CENTER: renderCenterKorean();         break;
     case Scene::MART_EVENT:     renderMartKorean();           break;
+    case Scene::MART_SHOP:      renderMartShopKorean();       break;
     case Scene::ENDING:         renderEndingKorean();         break;
     case Scene::WARP_MENU:      renderWarpMenuKorean();       break;
     case Scene::INGAME_MENU:    renderInGameMenuKorean();     break;
@@ -748,7 +779,7 @@ void Game::updateReceiveDex(Key key) {
             // 오버월드로 전환 — 플레이어는 연구소 안에 그대로 있어야 함 (원본은 직접 걸어 나감).
             // 오박사(5,3) 와 라이벌 자리(4,8) 사이 floor (5,8) 로 배치.
             player_.hasPokedex  = true;
-            player_.pokeballs   = 5;
+            addItem(player_, ITEM_POKE_BALL, 5);
             player_.mapId = MAP_OAK_LAB;
             player_.x = 5; player_.y = 8;
             player_.dir = 0;              // 아래 = 문 향함
@@ -897,7 +928,7 @@ void Game::updateMart(Key key) {
         martStep_++;
         if (martStep_ >= 4 || !MART_LINES[martStep_]) {
             player_.gotParcel = true;
-            player_.pokeballs += 3;
+            addItem(player_, ITEM_POKE_BALL, 3);
             if (ow_) ow_->onReturnFromCenter();
             else {
                 if (!ow_) ow_ = new Overworld(renderer, player_);
@@ -926,6 +957,160 @@ void Game::renderMartKorean() {
             std::string(Color::BG_BLACK)+Color::BRIGHT_WHITE);
     renderer.printW(bX+2, bY+bH-2, L"[ Z: 계속 ]",
         std::string(Color::BG_BLACK)+Color::BRIGHT_BLACK);
+}
+
+// ─── 마트 상점 (Scene::MART_SHOP) ────────────────────────────
+void Game::updateMartShop(Key key) {
+    if (shopMsgTimer_ > 0) {
+        shopMsgTimer_--;
+        if (shopMsgTimer_ == 0) shopMsg_ = nullptr;
+    }
+    const MartDef* mart = findMart(shopMartId_);
+    if (!mart) {
+        // 잘못된 mart — 오버월드 복귀
+        if (ow_) ow_->onReturnFromCenter();
+        changeScene(Scene::OVERWORLD);
+        return;
+    }
+    int rowCount = mart->numItems + 1;  // 마지막 = 나간다
+
+    if (shopMode_ == 0) {
+        // 메뉴
+        if (key == Key::UP)   shopCursor_ = (shopCursor_ - 1 + rowCount) % rowCount;
+        if (key == Key::DOWN) shopCursor_ = (shopCursor_ + 1) % rowCount;
+        if (key == Key::B) {
+            if (ow_) ow_->onReturnFromCenter();
+            changeScene(Scene::OVERWORLD);
+            return;
+        }
+        if (key == Key::A) {
+            if (shopCursor_ == mart->numItems) {
+                if (ow_) ow_->onReturnFromCenter();
+                changeScene(Scene::OVERWORLD);
+                return;
+            }
+            // 아이템 구매 진입 → 수량 모드
+            shopMode_     = 1;
+            shopQuantity_ = 1;
+        }
+        return;
+    }
+    // shopMode_ == 1: 수량 선택
+    ItemId id  = mart->items[shopCursor_];
+    int    pr  = getItemPrice(id);
+    int    maxByMoney = (pr > 0) ? (player_.money / pr) : 99;
+    int    maxQty     = maxByMoney < 99 ? maxByMoney : 99;
+    if (maxQty < 1) maxQty = 1;
+
+    if (key == Key::UP)    shopQuantity_ = (shopQuantity_ < maxQty) ? shopQuantity_ + 1 : 1;
+    if (key == Key::DOWN)  shopQuantity_ = (shopQuantity_ > 1) ? shopQuantity_ - 1 : maxQty;
+    if (key == Key::RIGHT) shopQuantity_ = (shopQuantity_ + 10 <= maxQty) ? shopQuantity_ + 10 : maxQty;
+    if (key == Key::LEFT)  shopQuantity_ = (shopQuantity_ - 10 >= 1) ? shopQuantity_ - 10 : 1;
+    if (key == Key::B) {
+        shopMode_ = 0;
+        return;
+    }
+    if (key == Key::A) {
+        int cost = pr * shopQuantity_;
+        if (cost > player_.money) {
+            shopMsg_      = L"돈이 부족합니다!";
+            shopMsgTimer_ = 90;
+        } else if (!addItem(player_, id, shopQuantity_)) {
+            shopMsg_      = L"가방이 꽉 차있습니다!";
+            shopMsgTimer_ = 90;
+        } else {
+            player_.money -= cost;
+            shopMsg_      = L"감사합니다!";
+            shopMsgTimer_ = 90;
+        }
+        shopMode_ = 0;
+    }
+}
+
+void Game::renderMartShop() {
+    int W = renderer.width, H = renderer.height;
+    renderer.fillRect(0, 0, W, H, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
+    int bw = 48, bh = 18, bx = W/2 - bw/2, by = H/2 - bh/2;
+    renderer.drawBox(bx, by, bw, bh, std::string(Color::BG_BLACK) + Color::WHITE);
+    renderer.fillRect(bx+1, by+1, bw-2, bh-2, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
+
+    const MartDef* mart = findMart(shopMartId_);
+    if (!mart) return;
+
+    char moneyBuf[32];
+    snprintf(moneyBuf, sizeof(moneyBuf), "$ %d", player_.money);
+    renderer.print(bx + bw - 14, by + 1, moneyBuf,
+        std::string(Color::BG_BLACK) + Color::BRIGHT_GREEN);
+
+    if (shopMode_ == 0) {
+        for (int i = 0; i < mart->numItems; i++) {
+            bool sel = (i == shopCursor_);
+            std::string color = sel
+                ? std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW
+                : std::string(Color::BG_BLACK) + Color::WHITE;
+            if (sel) renderer.print(bx+2, by+3+i*2, ">", color);
+            char pbuf[16];
+            snprintf(pbuf, sizeof(pbuf), "$ %d", getItemPrice(mart->items[i]));
+            renderer.print(bx + bw - 12, by+3+i*2, pbuf,
+                std::string(Color::BG_BLACK) + Color::WHITE);
+        }
+        bool selExit = (shopCursor_ == mart->numItems);
+        std::string ec = selExit
+            ? std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW
+            : std::string(Color::BG_BLACK) + Color::WHITE;
+        if (selExit) renderer.print(bx+2, by+3 + mart->numItems*2, ">", ec);
+    } else {
+        // 수량 선택: 박스 중앙에 ▲/▼ + 수량
+        int pr  = getItemPrice(mart->items[shopCursor_]);
+        int sum = pr * shopQuantity_;
+        char qbuf[32];
+        snprintf(qbuf, sizeof(qbuf), "x %2d   $ %d", shopQuantity_, sum);
+        renderer.print(bx + bw/2 - 7, by + bh/2, qbuf,
+            std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW);
+    }
+}
+
+void Game::renderMartShopKorean() {
+    int W = renderer.width, H = renderer.height;
+    int bw = 48, bh = 18, bx = W/2 - bw/2, by = H/2 - bh/2;
+
+    const MartDef* mart = findMart(shopMartId_);
+    if (!mart) return;
+
+    renderer.printW(bx + 2, by + 1, mart->name,
+        std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
+
+    if (shopMode_ == 0) {
+        renderer.printW(bx + 2, by + 2, L"무엇을 사시겠습니까?",
+            std::string(Color::BG_BLACK) + Color::WHITE);
+        for (int i = 0; i < mart->numItems; i++) {
+            bool sel = (i == shopCursor_);
+            std::string color = sel
+                ? std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW
+                : std::string(Color::BG_BLACK) + Color::WHITE;
+            renderer.printW(bx + 4, by + 3 + i*2, getItemName(mart->items[i]), color);
+        }
+        bool selExit = (shopCursor_ == mart->numItems);
+        std::string ec = selExit
+            ? std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW
+            : std::string(Color::BG_BLACK) + Color::WHITE;
+        renderer.printW(bx + 4, by + 3 + mart->numItems*2, L"나간다", ec);
+        if (shopMsg_ && shopMsgTimer_ > 0) {
+            renderer.printW(bx + 2, by + bh - 4, shopMsg_,
+                std::string(Color::BG_BLACK) + Color::BRIGHT_CYAN);
+        }
+        renderer.printW(bx + 2, by + bh - 2, L"[Z]:선택 [BS]:나가기",
+            std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+    } else {
+        wchar_t hbuf[64];
+        swprintf(hbuf, 64, L"%ls — 수량 선택", getItemName(mart->items[shopCursor_]));
+        renderer.printW(bx + 2, by + 2, hbuf,
+            std::string(Color::BG_BLACK) + Color::WHITE);
+        renderer.printW(bx + bw/2 - 5, by + bh/2 - 2, L"▲ ▼ 1   ◄ ► 10",
+            std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+        renderer.printW(bx + 2, by + bh - 2, L"[Z]:구매 [BS]:취소",
+            std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+    }
 }
 
 // ─── 게임 오버 ───────────────────────────────────────────────
@@ -1045,6 +1230,8 @@ void Game::updateInGameMenu(Key key) {
     if (key == Key::B) {
         if (menuState_ == InGameMenuState::TOP_LEVEL) {
             changeScene(prevScene_);
+        } else if (menuState_ == InGameMenuState::ITEM_TARGET) {
+            menuState_ = InGameMenuState::ITEM_BAG;
         } else {
             menuState_  = InGameMenuState::TOP_LEVEL;
             menuCursor_ = 0;
@@ -1061,7 +1248,10 @@ void Game::updateInGameMenu(Key key) {
                 menuState_ = InGameMenuState::PARTY_VIEW;
                 partyMenuCursor_ = 0;
             } else if (menuCursor_ == 1) {
-                menuState_ = InGameMenuState::ITEM_STUB;
+                menuState_ = InGameMenuState::ITEM_BAG;
+                itemMenuCursor_ = 0;
+                itemMsg_ = nullptr;
+                itemMsgTimer_ = 0;
             } else {
                 menuSaveMsg_      = true;
                 menuSaveMsgTimer_ = 90;
@@ -1081,12 +1271,83 @@ void Game::updateInGameMenu(Key key) {
             menuState_ = InGameMenuState::PARTY_VIEW;
         }
         break;
-    case InGameMenuState::ITEM_STUB:
+    case InGameMenuState::ITEM_BAG: {
+        if (itemMsgTimer_ > 0) {
+            itemMsgTimer_--;
+            if (itemMsgTimer_ == 0) itemMsg_ = nullptr;
+        }
+        int n = player_.bagSize;
+        if (n == 0) {
+            // 가방 비어있음 — 키 입력 시 위 메뉴로 복귀
+            if (key == Key::A || key == Key::B) {
+                menuState_  = InGameMenuState::TOP_LEVEL;
+                menuCursor_ = 1;
+            }
+            break;
+        }
+        if (key == Key::UP)   itemMenuCursor_ = (itemMenuCursor_ - 1 + n) % n;
+        if (key == Key::DOWN) itemMenuCursor_ = (itemMenuCursor_ + 1) % n;
         if (key == Key::A) {
-            menuState_  = InGameMenuState::TOP_LEVEL;
-            menuCursor_ = 1;
+            ItemId id = player_.bag[itemMenuCursor_].id;
+            if (id == ITEM_POTION) {
+                // 회복 대상 파티 선택
+                if (player_.partySize == 0) {
+                    itemMsg_ = L"포켓몬이 없다!";
+                    itemMsgTimer_ = 60;
+                } else {
+                    menuState_ = InGameMenuState::ITEM_TARGET;
+                    itemTargetCursor_ = 0;
+                }
+            } else if (id == ITEM_POKE_BALL) {
+                itemMsg_ = L"이건 배틀 중에만 쓸 수 있다!";
+                itemMsgTimer_ = 90;
+            }
         }
         break;
+    }
+    case InGameMenuState::ITEM_TARGET: {
+        int n = player_.partySize;
+        if (n == 0) {
+            menuState_ = InGameMenuState::ITEM_BAG;
+            break;
+        }
+        if (key == Key::UP)   itemTargetCursor_ = (itemTargetCursor_ - 1 + n) % n;
+        if (key == Key::DOWN) itemTargetCursor_ = (itemTargetCursor_ + 1) % n;
+        if (key == Key::A) {
+            Pokemon& p = player_.party[itemTargetCursor_];
+            if (!p.species) {
+                itemMsg_ = L"빈 슬롯이다!";
+                itemMsgTimer_ = 60;
+            } else if (p.currentHP <= 0) {
+                itemMsg_ = L"쓰러진 포켓몬에겐 효과가 없다!";
+                itemMsgTimer_ = 90;
+                menuState_ = InGameMenuState::ITEM_BAG;
+            } else if (p.currentHP >= p.maxHP) {
+                itemMsg_ = L"HP가 가득 차 있다!";
+                itemMsgTimer_ = 90;
+                menuState_ = InGameMenuState::ITEM_BAG;
+            } else {
+                int heal = POTION_HEAL_AMOUNT;
+                if (p.currentHP + heal > p.maxHP) heal = p.maxHP - p.currentHP;
+                p.currentHP += heal;
+                removeItem(player_, ITEM_POTION, 1);
+                itemMsg_ = L"상처약을 사용했다!";
+                itemMsgTimer_ = 90;
+                menuState_ = InGameMenuState::ITEM_BAG;
+                // 가방이 비거나 커서 범위 벗어나면 보정
+                if (player_.bagSize == 0) {
+                    menuState_  = InGameMenuState::TOP_LEVEL;
+                    menuCursor_ = 1;
+                } else if (itemMenuCursor_ >= player_.bagSize) {
+                    itemMenuCursor_ = player_.bagSize - 1;
+                }
+            }
+        }
+        if (key == Key::B) {
+            menuState_ = InGameMenuState::ITEM_BAG;
+        }
+        break;
+    }
     }
 }
 
@@ -1163,19 +1424,26 @@ void Game::renderInGameMenu() {
                 renderer.print(bx+28, by+11+i, mvbuf, std::string(Color::BG_BLACK) + Color::WHITE);
             }
         }
-    } else if (menuState_ == InGameMenuState::ITEM_STUB) {
+    } else if (menuState_ == InGameMenuState::ITEM_BAG ||
+               menuState_ == InGameMenuState::ITEM_TARGET) {
         int bw = 44, bh = 14, bx = W/2 - 22, by = 5;
         renderer.drawBox(bx, by, bw, bh, std::string(Color::BG_BLACK) + Color::WHITE);
         renderer.fillRect(bx+1, by+1, bw-2, bh-2, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
-        char ibuf[48];
-        snprintf(ibuf, sizeof(ibuf), "         : %d", player_.pokeballs);
-        renderer.print(bx+4, by+3, ibuf, std::string(Color::BG_BLACK) + Color::WHITE);
-        snprintf(ibuf, sizeof(ibuf), "         : %d", player_.superballs);
-        renderer.print(bx+4, by+4, ibuf, std::string(Color::BG_BLACK) + Color::WHITE);
-        snprintf(ibuf, sizeof(ibuf), "         : %d", player_.potions);
-        renderer.print(bx+4, by+5, ibuf, std::string(Color::BG_BLACK) + Color::WHITE);
-        snprintf(ibuf, sizeof(ibuf), "         : %d", player_.superpotions);
-        renderer.print(bx+4, by+6, ibuf, std::string(Color::BG_BLACK) + Color::WHITE);
+        // 가방 아이템 리스트 (커서 표시)
+        for (int i = 0; i < player_.bagSize; i++) {
+            bool sel = (menuState_ == InGameMenuState::ITEM_BAG && i == itemMenuCursor_);
+            if (sel) renderer.print(bx+2, by+3+i, ">",
+                std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW);
+            char cntBuf[16];
+            snprintf(cntBuf, sizeof(cntBuf), "x%-2d", player_.bag[i].count);
+            renderer.print(bx+bw-8, by+3+i, cntBuf,
+                std::string(Color::BG_BLACK) + Color::WHITE);
+        }
+        // 돈 표시
+        char moneyBuf[32];
+        snprintf(moneyBuf, sizeof(moneyBuf), "$%d", player_.money);
+        renderer.print(bx+bw-12, by+1, moneyBuf,
+            std::string(Color::BG_BLACK) + Color::BRIGHT_GREEN);
     }
 }
 
@@ -1284,23 +1552,44 @@ void Game::renderInGameMenuKorean() {
         }
         renderer.printW(bx + 2, by + bh - 2, L"[Z]: 뒤로",
             std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
-    } else if (menuState_ == InGameMenuState::ITEM_STUB) {
+    } else if (menuState_ == InGameMenuState::ITEM_BAG) {
         int bw = 44, bh = 14, bx = W/2 - 22, by = 5;
         renderer.printW(bx + bw/2 - 2, by + 1, L"가방",
             std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
-        renderer.printW(bx + 4, by + 3, L"몬스터볼",
-            std::string(Color::BG_BLACK) + Color::WHITE);
-        renderer.printW(bx + 4, by + 4, L"슈퍼볼",
-            std::string(Color::BG_BLACK) + Color::WHITE);
-        renderer.printW(bx + 4, by + 5, L"상처약",
-            std::string(Color::BG_BLACK) + Color::WHITE);
-        renderer.printW(bx + 4, by + 6, L"좋은상처약",
-            std::string(Color::BG_BLACK) + Color::WHITE);
-        renderer.printW(bx + 2, by + 9,  L"※ 아이템 시스템 연동 전",
+        if (player_.bagSize == 0) {
+            renderer.printW(bx + 4, by + 4, L"가방이 비어있다.",
+                std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+        } else {
+            for (int i = 0; i < player_.bagSize; i++) {
+                bool sel = (i == itemMenuCursor_);
+                std::string color = sel
+                    ? std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW
+                    : std::string(Color::BG_BLACK) + Color::WHITE;
+                renderer.printW(bx + 4, by + 3 + i, getItemName(player_.bag[i].id), color);
+            }
+        }
+        if (itemMsg_ && itemMsgTimer_ > 0) {
+            renderer.printW(bx + 2, by + bh - 4, itemMsg_,
+                std::string(Color::BG_BLACK) + Color::BRIGHT_CYAN);
+        }
+        renderer.printW(bx + 2, by + bh - 2, L"[Z]: 사용  [BS]: 뒤로",
             std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
-        renderer.printW(bx + 2, by + 10, L"  ITEM_SYSTEM_INTEGRATION.md 참고",
-            std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
-        renderer.printW(bx + 2, by + bh - 2, L"[Z]: 돌아가기",
+    } else if (menuState_ == InGameMenuState::ITEM_TARGET) {
+        int bw = 44, bh = 14, bx = W/2 - 22, by = 5;
+        renderer.printW(bx + bw/2 - 5, by + 1, L"누구에게 사용?",
+            std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
+        for (int i = 0; i < player_.partySize; i++) {
+            const Pokemon& p = player_.party[i];
+            if (!p.species) continue;
+            bool sel = (i == itemTargetCursor_);
+            std::string color = sel
+                ? std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW
+                : std::string(Color::BG_BLACK) + Color::WHITE;
+            wchar_t lineBuf[64];
+            swprintf(lineBuf, 64, L"%ls  HP %d/%d", p.species->name, p.currentHP, p.maxHP);
+            renderer.printW(bx + 4, by + 3 + i, lineBuf, color);
+        }
+        renderer.printW(bx + 2, by + bh - 2, L"[Z]: 사용  [BS]: 뒤로",
             std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
     }
 }

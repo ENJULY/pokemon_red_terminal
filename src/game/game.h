@@ -22,6 +22,7 @@ enum class Scene {
     BOSS_BATTLE,        // 브록 배틀
     POKEMON_CENTER,     // 포켓몬센터 이벤트
     MART_EVENT,         // 마트 소포 이벤트
+    MART_SHOP,          // 마트 구매 화면
     GAME_OVER,          // 전멸
     ENDING,             // 브록 클리어 엔딩
     WARP_MENU,          // 디버그: Ctrl+M 워프 메뉴
@@ -32,7 +33,8 @@ enum class InGameMenuState {
     TOP_LEVEL,    // 최상위 (포켓몬/아이템/저장)
     PARTY_VIEW,   // 파티 목록
     PARTY_DETAIL, // 포켓몬 상세
-    ITEM_STUB,    // 가방 — 아이템 시스템 연동 전 스텁
+    ITEM_BAG,     // 가방 (아이템 리스트 + 사용)
+    ITEM_TARGET,  // 상처약 사용 대상 파티 선택
 };
 
 class Game {
@@ -128,6 +130,18 @@ private:
     void renderMart();
     void renderMartKorean();
 
+    // ─── 마트 상점 ───
+    int  shopMartId_     = 0;
+    int  shopCursor_     = 0;       // 0..numItems(아이템) | numItems(=나간다)
+    int  shopMode_       = 0;       // 0=메뉴, 1=수량 선택
+    int  shopQuantity_   = 1;
+    const wchar_t* shopMsg_ = nullptr;
+    int  shopMsgTimer_   = 0;
+
+    void updateMartShop(Key key);
+    void renderMartShop();
+    void renderMartShopKorean();
+
     // ─── 게임 오버 ───
     void renderGameOver();
     void updateGameOver(Key key);
@@ -143,6 +157,10 @@ private:
     int             menuCursor_       = 0;
     int             partyMenuCursor_  = 0;
     int             detailPartyIdx_   = 0;
+    int             itemMenuCursor_   = 0;
+    int             itemTargetCursor_ = 0;
+    const wchar_t*  itemMsg_          = nullptr;
+    int             itemMsgTimer_     = 0;
     bool            menuSaveMsg_      = false;
     int             menuSaveMsgTimer_ = 0;
     void updateInGameMenu(Key key);
