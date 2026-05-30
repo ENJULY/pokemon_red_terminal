@@ -20,10 +20,9 @@ struct Pokemon {
 
 // ─── 아이템 시스템 (단일 배열, pokered 방식) ────────────────
 enum ItemId {
-    ITEM_NONE       = 0,
-    ITEM_POTION     = 1,  // 상처약 — HP 20 회복
-    ITEM_POKE_BALL  = 2,  // 몬스터볼 — 야생 포획
-    ITEM_RARE_CANDY = 3,  // 이상한사탕 — 오버월드 전용, 사용 시 레벨 +1 (전투 가방엔 안 보임)
+    ITEM_NONE      = 0,
+    ITEM_POTION    = 1,  // 상처약 — HP 20 회복
+    ITEM_POKE_BALL = 2,  // 몬스터볼 — 야생 포획
 };
 
 struct ItemSlot {
@@ -74,25 +73,7 @@ struct Player {
     int  cutTreeX[MAX_CUT_TREES];
     int  cutTreeY[MAX_CUT_TREES];
     int  cutTreeCount;
-
-    // 획득 완료한 아이템볼(필드 포켓볼) 위치 — 획득 후 숨김 처리
-    static constexpr int MAX_ITEM_BALLS = 32;
-    int  itemBallMapId[MAX_ITEM_BALLS];
-    int  itemBallX[MAX_ITEM_BALLS];
-    int  itemBallY[MAX_ITEM_BALLS];
-    int  itemBallCount;
-
-    // 포켓덱스 — 종족별 포획/처치 횟수 (SPECIES 인덱스 기준). 둘 중 하나라도 >0이면 도감 등록.
-    int  dexCaught[NUM_SPECIES_DATA];
-    int  dexDefeated[NUM_SPECIES_DATA];
 };
-
-// 종족 id → SPECIES 배열 인덱스 (없으면 -1)
-inline int speciesIndex(int id) {
-    for (int i = 0; i < NUM_SPECIES_DATA; i++)
-        if (SPECIES[i].id == id) return i;
-    return -1;
-}
 
 static constexpr int MOVE_CUT = 18;
 
@@ -124,23 +105,6 @@ inline bool addCutTree(Player& pl, int mapId, int x, int y) {
     return true;
 }
 
-inline bool isItemBallTaken(const Player& pl, int mapId, int x, int y) {
-    for (int i = 0; i < pl.itemBallCount; i++) {
-        if (pl.itemBallMapId[i] == mapId && pl.itemBallX[i] == x && pl.itemBallY[i] == y)
-            return true;
-    }
-    return false;
-}
-
-inline bool addItemBall(Player& pl, int mapId, int x, int y) {
-    if (pl.itemBallCount >= Player::MAX_ITEM_BALLS) return false;
-    pl.itemBallMapId[pl.itemBallCount] = mapId;
-    pl.itemBallX[pl.itemBallCount] = x;
-    pl.itemBallY[pl.itemBallCount] = y;
-    pl.itemBallCount++;
-    return true;
-}
-
 inline void recalcStats(Pokemon& p) {
     if (!p.species) return;
     p.maxHP  = calcHP  (p.species->baseHP,  p.level);
@@ -148,36 +112,6 @@ inline void recalcStats(Pokemon& p) {
     p.def    = calcStat(p.species->baseDef, p.level);
     p.spe    = calcStat(p.species->baseSpe, p.level);
     p.spc    = calcStat(p.species->baseSpc, p.level);
-}
-
-// 이상한사탕 — 레벨 +1 (스탯 재계산, HP 증가분 반영, 3의 배수면 빈 슬롯 기술 자동 습득)
-// 성공 시 true. 이미 Lv100이면 false.
-inline bool rareCandyLevelUp(Pokemon& p) {
-    if (!p.species || p.level >= 100) return false;
-    int oldMax = p.maxHP;
-    p.level++;
-    p.exp = expForLevel(p.level);
-    recalcStats(p);
-    p.currentHP += (p.maxHP - oldMax);
-    if (p.currentHP > p.maxHP) p.currentHP = p.maxHP;
-    if (p.currentHP < 1) p.currentHP = 1;
-    if (p.level % 3 == 0 && p.numMoves < 4) {
-        for (int i = 0; i < 8; i++) {
-            const LearnMove& lm = p.species->learnset[i];
-            if (lm.level == 0 && lm.moveId == 0) break;
-            int mid = lm.moveId;
-            if (mid == 0) continue;
-            bool has = false;
-            for (int j = 0; j < p.numMoves; j++)
-                if (p.moves[j].moveId == mid) { has = true; break; }
-            if (has) continue;
-            p.moves[p.numMoves].moveId = mid;
-            p.moves[p.numMoves].pp     = getMoveData(mid).maxPP;
-            p.numMoves++;
-            break;
-        }
-    }
-    return true;
 }
 
 inline Pokemon makePokemon(int speciesId, int level) {
@@ -261,19 +195,17 @@ inline const MartDef* findMart(int martId) {
 // ─── 아이템 헬퍼 ────────────────────────────────────────────
 inline const wchar_t* getItemName(ItemId id) {
     switch (id) {
-        case ITEM_POTION:     return L"상처약";
-        case ITEM_POKE_BALL:  return L"몬스터볼";
-        case ITEM_RARE_CANDY: return L"이상한사탕";
-        default:              return L"-";
+        case ITEM_POTION:    return L"상처약";
+        case ITEM_POKE_BALL: return L"몬스터볼";
+        default:             return L"-";
     }
 }
 
 inline int getItemPrice(ItemId id) {
     switch (id) {
-        case ITEM_POTION:     return 300;
-        case ITEM_POKE_BALL:  return 200;
-        case ITEM_RARE_CANDY: return 0;   // 상점 미판매 (필드 입수 전용)
-        default:              return 0;
+        case ITEM_POTION:    return 300;
+        case ITEM_POKE_BALL: return 200;
+        default:             return 0;
     }
 }
 
