@@ -202,21 +202,21 @@ void Overworld::updateCutscene(Key key) {
         return;
     }
 
-    // ── walking ── (자동 걷기, target까지)
+    // ── walking ── (자동 걷기, target까지 / 플레이어와 동일한 슬라이드 보간)
     if (cs.step == 0) {
-        cs.walkTimer--;
-        if (cs.walkTimer <= 0) {
-            // 한 칸 이동
-            int dx = (cs.targetX > cs.ax) - (cs.targetX < cs.ax);
-            int dy = (cs.targetY > cs.ay) - (cs.targetY < cs.ay);
-            if (dx || dy) {
-                cs.ax += dx; cs.ay += dy;
-                cs.adir = (dy > 0) ? 0 : (dy < 0) ? 1 : (dx < 0) ? 2 : 3;
-                cs.walkTimer = 8;
-            } else {
-                // 도착 — 대사 시작
-                cs.step = 1;
-            }
+        if (cs.moving > 0) { cs.moving--; return; }  // 슬라이드 진행 중
+        // 다음 칸으로 한 걸음
+        int dx = (cs.targetX > cs.ax) - (cs.targetX < cs.ax);
+        int dy = (cs.targetY > cs.ay) - (cs.targetY < cs.ay);
+        if (dx || dy) {
+            cs.ax += dx; cs.ay += dy;            // 목표 타일로 즉시 전진
+            cs.adir = (dy > 0) ? 0 : (dy < 0) ? 1 : (dx < 0) ? 2 : 3;
+            cs.stepDx = dx; cs.stepDy = dy;
+            cs.moving = STEP_FRAMES;             // 렌더가 OLD 타일에서 슬라이드 시작
+            cs.walkStep++;                       // 걸음마다 walk 포즈 toggle
+        } else {
+            // 도착 — 대사 시작
+            cs.step = 1;
         }
         return;
     }
@@ -913,7 +913,14 @@ void Overworld::renderKorean() {
         int camY = state_.py - tilesY / 2;
         int sx = (cs.ax - camX) * 16;
         int sy = (cs.ay - camY) * 8;
-        const OwPlayerFrame* spr = getNpcSpritePtr(cs.spriteId, cs.adir);
+        // 슬라이드 보간 (플레이어 주인공과 동일: OLD 타일 → 현재 타일)
+        if (cs.moving > 0) {
+            sx -= cs.stepDx * 16 * cs.moving / STEP_FRAMES;
+            sy -= cs.stepDy * 8 * cs.moving / STEP_FRAMES;
+        }
+        // 걷는 중이면 walk 포즈 toggle (플레이어와 동일: walkStep 짝/홀)
+        int cutWalk = (cs.moving > 0) ? (cs.walkStep & 1) : 0;
+        const OwPlayerFrame* spr = getNpcSpritePtr(cs.spriteId, cs.adir, cutWalk);
         if (sy >= 0 && sy + 8 <= viewH) {
             for (int r = 0; r < 8; r++)
                 if (spr->rows[r])

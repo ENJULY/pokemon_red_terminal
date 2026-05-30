@@ -33,7 +33,10 @@ struct OwCutscene {
     int  targetX, targetY;   // 도착 목표
     int  adir;               // actor 방향 (0=down 1=up 2=left 3=right)
     int  spriteId;           // NPC sprite ID (sprites.h NpcSpriteId)
-    int  walkTimer;          // 걷기 페이스 (frame 단위 카운트다운)
+    int  walkTimer;          // (구) 걷기 페이스 — 현재 미사용, moving이 대체
+    int  moving = 0;         // 슬라이드 남은 프레임 (플레이어 state_.moving과 동일)
+    int  stepDx = 0, stepDy = 0; // 현재 걸음 방향 (보간용)
+    int  walkStep = 0;       // 누적 걸음수 (walk 포즈 토글용)
     int  dialogIdx;          // 대사 진행
     bool fadingOut;          // 대사 끝, 화면 페이드 중
     int  fadeFrame;          // 페이드 카운트다운
