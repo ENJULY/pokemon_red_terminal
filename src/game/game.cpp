@@ -75,6 +75,7 @@ Game::Game() {
 
 void Game::run() {
     renderer.init();
+    Audio::init();
     const int FRAME_MS = 62;
 
     while (running) {
@@ -90,9 +91,19 @@ void Game::run() {
             update(key);
         }
 
+        updateBGM();      // 씬/맵에 맞는 BGM 선택 (같은 곡이면 내부에서 무시)
+        Audio::update();  // 곡 끝나면 재시작 — 루프 보장
+
         renderer.clear();
         render();
         renderKorean();
+        // 볼륨 변경 시 잠깐 표시 (모든 씬 위에 마지막으로 그림)
+        if (volMsgTimer_ > 0) {
+            wchar_t vb[32];
+            swprintf(vb, 32, L"[ 볼륨 %d%% ]", Audio::volumePercent());
+            renderer.printW(2, 0, vb, std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW);
+            volMsgTimer_--;
+        }
         renderer.flush();
 
         DWORD elapsed = GetTickCount() - start;
@@ -108,9 +119,65 @@ void Game::changeScene(Scene next) {
     renderer.redrawAll();
 }
 
+// 맵 ID → BGM 트랙명 (sounds/<name>.wav)
+static const char* mapBGM(int id) {
+    switch (id) {
+    case MAP_PALLET:
+    case MAP_PLAYER_HOUSE:
+    case MAP_PLAYER_HOUSE2:           return "pallettown";
+    case MAP_ROUTE1:
+    case MAP_ROUTE2:
+    case MAP_ROUTE2_GATE:             return "route";
+    case MAP_VIRIDIAN:
+    case MAP_PEWTER:
+    case MAP_VIRIDIAN_MART:
+    case MAP_PEWTER_MART:
+    case MAP_VIRIDIAN_SCHOOL_HOUSE:
+    case MAP_VIRIDIAN_NICKNAME_HOUSE: return "city";
+    case MAP_OAK_LAB:                 return "oakslab";
+    case MAP_PEWTER_GYM:              return "gym";
+    case MAP_VIRIDIAN_PC:
+    case MAP_PEWTER_PC:               return "pokecenter";
+    default:                          return "pallettown";
+    }
+}
+
+// 매 프레임: 현재 씬/맵에 맞는 BGM 을 고른다. playBGM 은 동일 곡이면 무시하므로
+// 전이마다 일일이 호출하지 않아도 항상 올바른 곡이 재생된다.
+void Game::updateBGM() {
+    const char* t = nullptr;
+    switch (scene_) {
+    case Scene::INTRO:
+    case Scene::NAME_INPUT:
+    case Scene::RIVAL_NAME_INPUT:     t = "title";          break;
+    case Scene::LAB_INTRO:
+    case Scene::STARTER_SELECT:
+    case Scene::RIVAL_INTERCEPT:
+    case Scene::RECEIVE_DEX:          t = "oakslab";        break;
+    case Scene::OVERWORLD:
+    case Scene::INGAME_MENU:
+    case Scene::WARP_MENU:
+    case Scene::MART_EVENT:
+    case Scene::MART_SHOP:            t = mapBGM(player_.mapId); break;
+    case Scene::WILD_BATTLE:          t = "wildbattle";     break;
+    case Scene::TRAINER_BATTLE:       t = "trainerbattle";  break;
+    case Scene::BOSS_BATTLE:          t = "gymleader";      break;
+    case Scene::POKEMON_CENTER:       t = "pokecenter";     break;
+    case Scene::ENDING:               t = "ending";         break;
+    case Scene::GAME_OVER:            t = nullptr;          break;  // 무음
+    default:                          t = nullptr;          break;
+    }
+    if (t) Audio::playBGM(t);
+    else   Audio::stopBGM();
+}
+
 // ─── 씬 라우팅 ───────────────────────────────────────────────
 void Game::update(Key key) {
     if (key == Key::ESCAPE) { running = false; return; }
+
+    // 볼륨 조절 (+/-) — 어느 씬에서나 동작
+    if (key == Key::VOL_UP)   { Audio::volumeUp();   volMsgTimer_ = 16; return; }
+    if (key == Key::VOL_DOWN) { Audio::volumeDown(); volMsgTimer_ = 16; return; }
 
     switch (scene_) {
     case Scene::INTRO:              updateIntro(key);          break;
@@ -132,6 +199,7 @@ void Game::update(Key key) {
             prevScene_  = scene_;
             menuState_  = InGameMenuState::TOP_LEVEL;
             menuCursor_ = 0;
+            Audio::playSE("se_menu");
             changeScene(Scene::INGAME_MENU);
             break;
         }
@@ -1248,6 +1316,12 @@ static const wchar_t* menuTypeName(Type t) {
 }
 
 void Game::updateInGameMenu(Key key) {
+    // 메뉴 조작 효과음
+    if (key == Key::UP || key == Key::DOWN || key == Key::LEFT || key == Key::RIGHT)
+        Audio::playSE("se_cursor");
+    else if (key == Key::A) Audio::playSE("se_select");
+    else if (key == Key::B) Audio::playSE("se_back");
+
     if (key == Key::B) {
         if (menuState_ == InGameMenuState::TOP_LEVEL) {
             changeScene(prevScene_);
@@ -1271,20 +1345,38 @@ void Game::updateInGameMenu(Key key) {
 
     switch (menuState_) {
     case InGameMenuState::TOP_LEVEL:
-        if (key == Key::UP)   menuCursor_ = (menuCursor_ + 2) % 3;
-        if (key == Key::DOWN) menuCursor_ = (menuCursor_ + 1) % 3;
+        // 원작 시작 메뉴 6항목: 0포켓덱스 1포켓몬 2가방 3이름 4설정 5닫기
+        if (itemMsgTimer_ > 0) { itemMsgTimer_--; if (itemMsgTimer_ == 0) itemMsg_ = nullptr; }
+        if (key == Key::UP)   menuCursor_ = (menuCursor_ + 5) % 6;
+        if (key == Key::DOWN) menuCursor_ = (menuCursor_ + 1) % 6;
         if (key == Key::A) {
-            if (menuCursor_ == 0) {
+            switch (menuCursor_) {
+            case 0:
+                menuState_ = InGameMenuState::POKEDEX;
+                dexCursor_ = 0;
+                break;
+            case 1:
                 menuState_ = InGameMenuState::PARTY_VIEW;
                 partyMenuCursor_ = 0;
-            } else if (menuCursor_ == 1) {
+                break;
+            case 2:
                 menuState_ = InGameMenuState::ITEM_BAG;
                 itemMenuCursor_ = 0;
                 itemMsg_ = nullptr;
                 itemMsgTimer_ = 0;
-            } else {
-                menuState_ = InGameMenuState::POKEDEX;
-                dexCursor_ = 0;
+                break;
+            case 3:  // 이름(트레이너 카드)
+                swprintf(itemMsgBuf_, 64, L"%ls   소지금: $%d", player_.name, player_.money);
+                itemMsg_ = itemMsgBuf_;
+                itemMsgTimer_ = 120;
+                break;
+            case 4:  // 설정
+                itemMsg_ = L"설정은 준비 중입니다.";
+                itemMsgTimer_ = 120;
+                break;
+            case 5:  // 닫기
+                changeScene(prevScene_);
+                break;
             }
         }
         break;
@@ -1338,10 +1430,10 @@ void Game::updateInGameMenu(Key key) {
         }
         int n = player_.bagSize;
         if (n == 0) {
-            // 가방 비어있음 — 키 입력 시 위 메뉴로 복귀
+            // 가방 비어있음 — 키 입력 시 위 메뉴로 복귀 (커서 = 가방)
             if (key == Key::A || key == Key::B) {
                 menuState_  = InGameMenuState::TOP_LEVEL;
-                menuCursor_ = 1;
+                menuCursor_ = 2;
             }
             break;
         }
@@ -1426,7 +1518,7 @@ void Game::updateInGameMenu(Key key) {
                 // 가방이 비거나 커서 범위 벗어나면 보정
                 if (player_.bagSize == 0) {
                     menuState_  = InGameMenuState::TOP_LEVEL;
-                    menuCursor_ = 1;
+                    menuCursor_ = 2;
                 } else if (itemMenuCursor_ >= player_.bagSize) {
                     itemMenuCursor_ = player_.bagSize - 1;
                 }
@@ -1459,24 +1551,26 @@ void Game::updateInGameMenu(Key key) {
 
 void Game::renderInGameMenu() {
     int W = renderer.width, H = renderer.height;
-    renderer.fillRect(0, 0, W, H, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
+    // 원본처럼: 화면을 검정으로 덮지 않고, 메뉴를 연 시점의 오버월드를 뒤에 그린다.
+    // (두 렌더 패스는 같은 셀 버퍼를 공유하므로 여기서 맵을 먼저 그리면
+    //  아래의 메뉴 박스가 그 위에 불투명하게 덮인다.)
+    if (ow_) {
+        ow_->render();
+        ow_->renderKorean();
+    } else {
+        renderer.fillRect(0, 0, W, H, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
+    }
 
     if (menuState_ == InGameMenuState::TOP_LEVEL) {
-        int mw = 26, mh = 11, mx = W - mw - 2, my = 2;
-        renderer.drawBox(mx, my, mw, mh, std::string(Color::BG_BLACK) + Color::WHITE);
-        renderer.fillRect(mx+1, my+1, mw-2, mh-2, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
-        for (int i = 1; i < mw-1; i++)
-            renderer.print(mx+i, my+2, "-", std::string(Color::BG_BLACK) + Color::WHITE);
-        for (int i = 1; i < mw-1; i++)
-            renderer.print(mx+i, my+8, "-", std::string(Color::BG_BLACK) + Color::WHITE);
-        static const char* labels[] = {"  POKEMON", "  ITEMS  ", "  POKEDEX"};
-        for (int i = 0; i < 3; i++) {
-            std::string color = (i == menuCursor_)
-                ? std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW
-                : std::string(Color::BG_BLACK) + Color::WHITE;
-            renderer.print(mx+2, my+3+i, labels[i], color);
+        // 원작 RBY 시작 메뉴: 흰 박스 + 검은 글씨, 우측 배치, 6항목
+        int mw = 20, mh = 10, mx = W - mw - 2, my = 2;
+        std::string wb = std::string(Color::BG_WHITE) + Color::BLACK;
+        renderer.fillRect(mx+1, my+1, mw-2, mh-2, ' ', wb);
+        renderer.drawBox(mx, my, mw, mh, wb);
+        // 커서(>) — 항목 텍스트는 한글 레이어에서 그림
+        for (int i = 0; i < 6; i++) {
             if (i == menuCursor_)
-                renderer.print(mx+2, my+3+i, ">", color);
+                renderer.print(mx+2, my+2+i, ">", wb);
         }
     } else if (menuState_ == InGameMenuState::POKEDEX) {
         int bw = 50, bh = NUM_SPECIES_DATA + 6, bx = W/2 - bw/2, by = 2;
@@ -1492,17 +1586,24 @@ void Game::renderInGameMenu() {
                 (isCur ? Color::BRIGHT_YELLOW : Color::WHITE));
         }
     } else if (menuState_ == InGameMenuState::POKEDEX_DETAIL) {
-        int bw = 52, bh = 18, bx = W/2 - bw/2, by = 3;
+        int bw = 70, bh = 24, bx = W/2 - bw/2, by = 2;
         renderer.drawBox(bx, by, bw, bh, std::string(Color::BG_BLACK) + Color::WHITE);
         renderer.fillRect(bx+1, by+1, bw-2, bh-2, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
         const PokemonSpecies& sp = SPECIES[dexDetailIdx_];
+        // 스프라이트 (왼쪽) — 40폭 × 최대 20행
+        const SpriteData* spr = getSpriteFront(sp.id);
+        if (spr) {
+            for (int r = 0; r < spr->height && spr->rows[r]; r++)
+                renderer.printRaw(bx+3, by+2+r, spr->rows[r]);
+        }
+        int tx = bx + 46;   // 오른쪽 텍스트 열
         char numbuf[16];
         snprintf(numbuf, sizeof(numbuf), "No.%03d", sp.id);
-        renderer.print(bx+4, by+2, numbuf, std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
-        char cntbuf[48];
-        snprintf(cntbuf, sizeof(cntbuf), "CAUGHT: %d    DEFEATED: %d",
+        renderer.print(tx, by+2, numbuf, std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
+        char cntbuf[32];
+        snprintf(cntbuf, sizeof(cntbuf), "%d / %d",
             player_.dexCaught[dexDetailIdx_], player_.dexDefeated[dexDetailIdx_]);
-        renderer.print(bx+4, by+13, cntbuf, std::string(Color::BG_BLACK) + Color::WHITE);
+        renderer.print(tx, by+15, cntbuf, std::string(Color::BG_BLACK) + Color::WHITE);
     } else if (menuState_ == InGameMenuState::PARTY_VIEW) {
         int bw = 66, bh = 15, bx = W/2 - 33, by = 3;
         renderer.drawBox(bx, by, bw, bh, std::string(Color::BG_BLACK) + Color::WHITE);
@@ -1590,18 +1691,18 @@ void Game::renderInGameMenuKorean() {
     int W = renderer.width;
 
     if (menuState_ == InGameMenuState::TOP_LEVEL) {
-        int mw = 26, mh = 11, mx = W - mw - 2, my = 2;
-        renderer.printW(mx + mw/2 - 2, my + 1, L"메뉴",
-            std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
-        static const wchar_t* menuLabels[] = { L"포켓몬", L"아이템", L"포켓덱스" };
-        for (int i = 0; i < 3; i++) {
-            std::string color = (i == menuCursor_)
-                ? std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW
-                : std::string(Color::BG_BLACK) + Color::WHITE;
-            renderer.printW(mx + 4, my + 3 + i, menuLabels[i], color);
-        }
-        renderer.printW(mx + 2, my + mh - 2, L"[BS] 닫기",
-            std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+        // 흰 박스 + 검은 글씨, 원작 7항목 (이름 항목엔 플레이어 이름)
+        int mw = 20, mx = W - mw - 2, my = 2;
+        std::string wb = std::string(Color::BG_WHITE) + Color::BLACK;
+        const wchar_t* menuLabels[6] = {
+            L"포켓덱스", L"포켓몬", L"가방", player_.name, L"설정", L"닫기"
+        };
+        for (int i = 0; i < 6; i++)
+            renderer.printW(mx + 4, my + 2 + i, menuLabels[i], wb);
+        // 이름/리포트/설정 메시지 (화면 하단)
+        if (itemMsg_ && itemMsgTimer_ > 0)
+            renderer.printW(2, renderer.height - 2, itemMsg_,
+                std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
     } else if (menuState_ == InGameMenuState::POKEDEX) {
         int bw = 50, bh = NUM_SPECIES_DATA + 6, bx = W/2 - bw/2, by = 2;
         renderer.printW(bx + bw/2 - 4, by + 1, L"포켓덱스",
@@ -1617,10 +1718,11 @@ void Game::renderInGameMenuKorean() {
         renderer.printW(bx + 2, by + bh - 2, L"[Z] 상세  [BS] 뒤로",
             std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
     } else if (menuState_ == InGameMenuState::POKEDEX_DETAIL) {
-        int bw = 52, bh = 18, bx = W/2 - bw/2, by = 3;
+        int bw = 70, bh = 24, bx = W/2 - bw/2, by = 2;
+        int tx = bx + 46;   // 오른쪽 텍스트 열 (왼쪽은 스프라이트)
         const PokemonSpecies& sp = SPECIES[dexDetailIdx_];
-        // 이름 + 도감번호(번호는 ASCII 레이어)
-        renderer.printW(bx + 14, by + 2, sp.name,
+        // 이름 (도감번호는 ASCII 레이어 위에)
+        renderer.printW(tx, by + 3, sp.name,
             std::string(Color::BG_BLACK) + Color::BRIGHT_WHITE);
         // 속성
         wchar_t typeBuf[32];
@@ -1628,23 +1730,21 @@ void Game::renderInGameMenuKorean() {
             swprintf(typeBuf, 32, L"속성: %ls / %ls", menuTypeName(sp.type1), menuTypeName(sp.type2));
         else
             swprintf(typeBuf, 32, L"속성: %ls", menuTypeName(sp.type1));
-        renderer.printW(bx + 4, by + 4, typeBuf, std::string(Color::BG_BLACK) + Color::CYAN);
+        renderer.printW(tx, by + 5, typeBuf, std::string(Color::BG_BLACK) + Color::CYAN);
         // 기본 기술
-        renderer.printW(bx + 4, by + 6, L"기본 기술",
+        renderer.printW(tx, by + 7, L"기본 기술",
             std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
         int row = 0;
         for (int i = 0; i < 4; i++) {
             int mid = sp.startMoves[i];
             if (mid == 0) continue;
             const MoveData& mv = getMoveData(mid);
-            renderer.printW(bx + 6, by + 7 + row, mv.name,
+            renderer.printW(tx + 1, by + 8 + row, mv.name,
                 std::string(Color::BG_BLACK) + Color::WHITE);
-            renderer.printW(bx + 22, by + 7 + row, menuTypeName(mv.type),
-                std::string(Color::BG_BLACK) + Color::CYAN);
             row++;
         }
         // 포획/처치 수 라벨 (수치는 ASCII 레이어)
-        renderer.printW(bx + 4, by + 12, L"포획 / 처치",
+        renderer.printW(tx, by + 14, L"포획 / 처치",
             std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
         renderer.printW(bx + 2, by + bh - 2, L"[BS] 뒤로",
             std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);

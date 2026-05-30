@@ -57,8 +57,11 @@ public:
     // (구) flush 우회 출력 → (현) 버퍼 경유 → flush diff로 깜빡임 없음
     void printRaw(int x, int y, const char* utf8_ansi);
 
-    // 박스 그리기 (ASCII +, -, |)
+    // 박스 그리기 (단선 ┌─┐│└┘)
     void drawBox(int x, int y, int w, int h, const std::string& color = "");
+
+    // 박스 그리기 (이중선 ╔═╗║╚╝) — 원작 RBY 메뉴풍 프레임
+    void drawBoxDouble(int x, int y, int w, int h, const std::string& color = "");
 
     // 영역 채우기
     void fillRect(int x, int y, int w, int h, char ch, const std::string& color = "");

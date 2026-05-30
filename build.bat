@@ -102,6 +102,12 @@ for %%D in (libwinpthread-1.dll libgcc_s_seh-1.dll libstdc++-6.dll) do (
     )
 )
 
+REM Copy sound assets next to the exe (audio.cpp 가 exe 기준으로 sounds\ 를 찾음)
+if exist sounds (
+    if not exist build\sounds mkdir build\sounds
+    copy /Y sounds\*.wav build\sounds\ >nul 2>&1
+)
+
 echo.
 echo [OK] Build succeeded
 echo ============================================

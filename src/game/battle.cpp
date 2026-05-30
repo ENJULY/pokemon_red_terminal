@@ -1104,13 +1104,14 @@ void Battle::render() {
             int cy = boxY + 2 + (i / 2);
             char ppStr[16];
             snprintf(ppStr, sizeof(ppStr), " PP:%d", myPoke.moves[i].pp);
-            std::string cc = std::string(Color::BG_BLACK) +
-                (state_.cursor == i ? Color::BRIGHT_YELLOW : Color::WHITE);
+            // 대화창(흰 종이 BG_PAPER) 위에 그리므로 배경을 종이색으로 통일
+            std::string cc = BG_PAPER +
+                (state_.cursor == i ? Color::RED : FG_DARK);
             if (state_.cursor == i) ren_.print(cx - 2, cy, ">", cc);
-            ren_.print(cx + 8, cy, ppStr, std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+            ren_.print(cx + 8, cy, ppStr, BG_PAPER + Color::BRIGHT_BLACK);
         }
         ren_.print(boxX + 2, boxY + boxH - 2, "[ B: back ]",
-            std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+            BG_PAPER + FG_DARK);
     }
 }
 

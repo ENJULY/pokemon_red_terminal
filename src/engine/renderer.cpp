@@ -119,6 +119,23 @@ void Renderer::drawBox(int x, int y, int w, int h, const std::string& color) {
     }
 }
 
+// 이중선 프레임 — 원작 포켓몬 메뉴창 느낌. (단선 drawBox 와 동일 구조, 글자만 ╔═╗║╚╝)
+void Renderer::drawBoxDouble(int x, int y, int w, int h, const std::string& color) {
+    if (w < 2 || h < 2) return;
+    setCellU(x,         y,         "\xe2\x95\x94", color);  // ╔
+    setCellU(x + w - 1, y,         "\xe2\x95\x97", color);  // ╗
+    setCellU(x,         y + h - 1, "\xe2\x95\x9a", color);  // ╚
+    setCellU(x + w - 1, y + h - 1, "\xe2\x95\x9d", color);  // ╝
+    for (int i = 1; i < w - 1; i++) {
+        setCellU(x + i, y,         "\xe2\x95\x90", color);  // ═
+        setCellU(x + i, y + h - 1, "\xe2\x95\x90", color);  // ═
+    }
+    for (int j = 1; j < h - 1; j++) {
+        setCellU(x,         y + j, "\xe2\x95\x91", color);  // ║
+        setCellU(x + w - 1, y + j, "\xe2\x95\x91", color);  // ║
+    }
+}
+
 void Renderer::fillRect(int x, int y, int w, int h, char ch, const std::string& color) {
     for (int j = y; j < y + h && j < height; j++)
         for (int i = x; i < x + w && i < width; i++)

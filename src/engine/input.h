@@ -10,6 +10,8 @@ enum class Key {
     ESCAPE,
     WARP_MENU,  // Ctrl+M — 디버그 워프 메뉴
     MENU,       // M — 인게임 메뉴 열기
+    VOL_UP,     // + — 볼륨 올림
+    VOL_DOWN,   // - — 볼륨 내림
     UNKNOWN
 };
 

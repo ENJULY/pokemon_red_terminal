@@ -50,12 +50,14 @@ public:
 private:
     Scene    scene_   = Scene::INTRO;
     int      frame_   = 0;
+    int      volMsgTimer_ = 0;   // 볼륨 표시 잔여 프레임
     Player   player_  = {};
     Battle*  battle_  = nullptr;
     Overworld* ow_    = nullptr;
 
     void changeScene(Scene next);
     void update(Key key);
+    void updateBGM();        // 씬/맵에 맞는 BGM 선택 (매 프레임)
     void render();
     void renderKorean();
 

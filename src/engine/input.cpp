@@ -13,6 +13,10 @@ static Key vkToKey(WORD vk) {
         case VK_SPACE:           return Key::START;
         case VK_ESCAPE:          return Key::ESCAPE;
         case 'M':                return Key::MENU;
+        case VK_OEM_PLUS:
+        case VK_ADD:             return Key::VOL_UP;    // + (상단/숫자패드)
+        case VK_OEM_MINUS:
+        case VK_SUBTRACT:        return Key::VOL_DOWN;  // -
         default:                 return Key::UNKNOWN;
     }
 }

@@ -6,6 +6,13 @@ build/hello.*
 *.o
 _dbg_*
 
+# 사운드: 원본(sounds/)만 커밋, build로 복사된 건 제외 (build.bat가 재생성)
+build/sounds/
+
+# python 캐시 (사운드 합성기 tools/synth_audio.py)
+__pycache__/
+*.pyc
+
 # editor / OS
 .vscode/
 .idea/
