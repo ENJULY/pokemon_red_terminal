@@ -30,11 +30,13 @@ enum class Scene {
 };
 
 enum class InGameMenuState {
-    TOP_LEVEL,    // 최상위 (포켓몬/아이템/저장)
-    PARTY_VIEW,   // 파티 목록
-    PARTY_DETAIL, // 포켓몬 상세
-    ITEM_BAG,     // 가방 (아이템 리스트 + 사용)
-    ITEM_TARGET,  // 상처약 사용 대상 파티 선택
+    TOP_LEVEL,     // 최상위 (포켓몬/아이템/포켓덱스)
+    PARTY_VIEW,    // 파티 목록
+    PARTY_DETAIL,  // 포켓몬 상세
+    ITEM_BAG,      // 가방 (아이템 리스트 + 사용)
+    ITEM_TARGET,   // 상처약 사용 대상 파티 선택
+    POKEDEX,       // 포켓덱스 목록
+    POKEDEX_DETAIL,// 포켓덱스 상세
 };
 
 class Game {
@@ -157,12 +159,15 @@ private:
     int             menuCursor_       = 0;
     int             partyMenuCursor_  = 0;
     int             detailPartyIdx_   = 0;
+    int             detailMoveCursor_ = 0;   // 상세 화면 기술/액션 커서
+    int             detailSwapSel_    = -1;  // 기술 순서 교체용 첫 선택 슬롯(-1=없음)
     int             itemMenuCursor_   = 0;
     int             itemTargetCursor_ = 0;
     const wchar_t*  itemMsg_          = nullptr;
+    wchar_t         itemMsgBuf_[64]   = {0};  // 동적 아이템 메시지(예: 이상한사탕 레벨업)
     int             itemMsgTimer_     = 0;
-    bool            menuSaveMsg_      = false;
-    int             menuSaveMsgTimer_ = 0;
+    int             dexCursor_        = 0;   // 포켓덱스 목록 커서 (SPECIES 인덱스)
+    int             dexDetailIdx_     = 0;   // 포켓덱스 상세 대상 (SPECIES 인덱스)
     void updateInGameMenu(Key key);
     void renderInGameMenu();
     void renderInGameMenuKorean();

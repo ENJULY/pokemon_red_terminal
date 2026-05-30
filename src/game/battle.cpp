@@ -48,12 +48,13 @@ void Battle::startWild(int speciesId, int level) {
 }
 
 void Battle::startTrainer(const wchar_t* name, const wchar_t* preText,
-                          int* ids, int* levels, int sz, int introId) {
+                          int* ids, int* levels, int sz, int introId, int prize) {
     state_ = {};
     state_.type = BattleType::TRAINER;
     state_.trainerName = name;
     state_.trainerPreText = preText;
     state_.trainerIntroId = introId;
+    state_.trainerPrize = prize;
     state_.enemyPartySize = sz;
     for (int i = 0; i < sz && i < 3; i++)
         state_.enemyParty[i] = makePokemon(ids[i], levels[i]);
@@ -73,7 +74,7 @@ void Battle::startTrainer(const wchar_t* name, const wchar_t* preText,
 void Battle::startBrock() {
     int ids[]    = {74, 95};
     int lvls[]   = {12, 14};
-    startTrainer(L"관장 브록", L"바위 포켓몬은 최강이다!", ids, lvls, 2, 3);  // 3=BROCK intro
+    startTrainer(L"관장 브록", L"바위 포켓몬은 최강이다!", ids, lvls, 2, 3, 1000);  // 3=BROCK intro, 상금 1000
     state_.type = BattleType::BOSS;
 }
 
@@ -143,14 +144,144 @@ int Battle::chooseEnemyMove() {
 }
 
 void Battle::grantExp() {
-    int idx = state_.playerPartyIdx;
-    Pokemon& p = pl_.party[idx];
+    // 적 포켓몬 처치 — 포켓덱스 처치 횟수 기록
+    {
+        int di = speciesIndex(state_.enemy.species->id);
+        if (di >= 0) pl_.dexDefeated[di]++;
+    }
     int base = state_.enemy.species->baseExp;
-    int gain = base * state_.enemy.level / 7;
-    if (gain < 1) gain = 1;
-    p.exp += gain;
-    state_.expAmount = gain;
+    int full = base * state_.enemy.level / 7;
+    if (full < 1) full = 1;
+    int small = full / 2;          // 출전(막타) 외 포켓몬은 소량
+    if (small < 1) small = 1;
+
+    for (int i = 0; i < 6; i++) { state_.expGainAmt[i] = 0; state_.expGotExp[i] = false; }
+
+    // 전체 분배: 살아있는 모든 파티 포켓몬에게 (막타=전투경험치 그대로, 나머지=소량)
+    for (int i = 0; i < pl_.partySize; i++) {
+        if (pokemonFainted(pl_.party[i])) continue;
+        int g = (i == state_.playerPartyIdx) ? full : small;
+        pl_.party[i].exp += g;
+        state_.expGainAmt[i] = g;
+        state_.expGotExp[i]  = true;
+        // 막타 친 포켓몬(playerPartyIdx)은 FAINT_ENEMY 흐름에서 인터랙티브 처리.
+        // 나머지는 여기서 레벨업(4칸 가득 기술은 교체 큐에 적재 → EXP_OTHERS 후 팝업).
+        if (i != state_.playerPartyIdx)
+            silentLevelUp(pl_.party[i], i);
+    }
+    state_.expAmount = full;        // 막타 메시지용
     state_.expGained = true;
+}
+
+// 전투에서 보이는 가방 슬롯만 추림 (이상한사탕 등 오버월드 전용 아이템 제외)
+int Battle::battleBagVisible(int* outSlots) const {
+    int c = 0;
+    for (int i = 0; i < pl_.bagSize; i++) {
+        if (pl_.bag[i].id == ITEM_RARE_CANDY) continue;  // 전투 가방엔 표시 안 함
+        outSlots[c++] = i;
+    }
+    return c;
+}
+
+// 적 기절 후 — 다음 상대 포켓몬 등장 또는 승리 처리
+void Battle::advanceAfterFaint() {
+    state_.enemyPartyIdx++;
+    if (state_.enemyPartyIdx < state_.enemyPartySize) {
+        state_.enemy = state_.enemyParty[state_.enemyPartyIdx];
+        swprintf(state_.msg, 128, L"%ls! %ls 나와라!",
+            state_.trainerName ? state_.trainerName : L"",
+            state_.enemy.species->name);
+        state_.msg2[0] = 0;
+        state_.awaitKey = true;
+        state_.phase = BattlePhase::SHOW_MSG;
+        state_.playerFirst = true;  // 다음 SHOW_MSG에서 CHOOSE_ACTION으로
+    } else {
+        state_.result = BattleResult::WIN;
+        state_.phase = BattlePhase::VICTORY;
+        if (state_.type == BattleType::BOSS)
+            swprintf(state_.msg, 128, L"브록을 물리쳤다! 바위배지를 획득!");
+        else if (state_.type == BattleType::TRAINER)
+            swprintf(state_.msg, 128, L"%ls을(를) 물리쳤다!", state_.trainerName);
+        else
+            swprintf(state_.msg, 128, L"승리했다!");
+        // 트레이너/보스 격파 시 상금 지급 + 메시지
+        if ((state_.type == BattleType::TRAINER || state_.type == BattleType::BOSS)
+            && state_.trainerPrize > 0) {
+            pl_.money += state_.trainerPrize;
+            swprintf(state_.msg2, 128, L"상금 %d원을 손에 넣었다!", state_.trainerPrize);
+        } else {
+            state_.msg2[0] = 0;
+        }
+        state_.awaitKey = true;
+    }
+}
+
+// 경험치 메시지 종료 후 — 기술 교체 팝업 대기열의 첫 항목으로 진입
+void Battle::startLearnMoveQueue() {
+    state_.learnQueueIdx     = 0;
+    state_.learnSubPhase     = 0;
+    state_.learnForgetCursor = 0;
+    int pokeIdx = state_.learnQueuePoke[0];
+    int mvId    = state_.learnQueue[0];
+    swprintf(state_.msg, 128, L"%ls은(는) 새로운 기술 %ls을(를) 배우고 싶어한다!",
+        pl_.party[pokeIdx].species->name, getMoveData(mvId).name);
+    swprintf(state_.msg2, 128, L"하지만 기술은 4개까지만 배울 수 있다!");
+    state_.phase = BattlePhase::LEARN_MOVE;
+    state_.awaitKey = true;
+}
+
+// learnset 순서상 아직 안 배운(그리고 대기열에도 없는) 다음 기술 id
+// 단, 자신의 약점 속성(자기 타입에게 효과가 굉장한 타입) 기술은 배우지 않는다.
+int Battle::nextLearnableMove(Pokemon& p, int pokeIdx) {
+    for (int i = 0; i < 8; i++) {
+        const LearnMove& lm = p.species->learnset[i];
+        if (lm.level == 0 && lm.moveId == 0) break;
+        int mid = lm.moveId;
+        if (mid == 0) continue;
+        bool has = false;
+        for (int j = 0; j < p.numMoves; j++)
+            if (p.moves[j].moveId == mid) { has = true; break; }
+        // 같은 포켓몬의 교체 대기열에 이미 있으면 제외
+        for (int j = 0; j < state_.learnQueueCnt; j++)
+            if (state_.learnQueuePoke[j] == pokeIdx && state_.learnQueue[j] == mid) { has = true; break; }
+        if (has) continue;
+        // 약점 속성 기술 제외: 기술 타입이 내 타입에게 효과가 굉장하면(>=2x) 건너뜀
+        Type mt = getMoveData(mid).type;
+        if (getEffInt(mt, p.species->type1, p.species->type2) >= 20) continue;
+        return mid;
+    }
+    return 0;
+}
+
+// 막타 외 포켓몬 — 레벨업 + 3의 배수 기술 획득
+// (빈 슬롯이면 즉시 습득, 4칸 가득이면 교체 팝업 대기열에 추가 → 막타와 동일하게 선택)
+void Battle::silentLevelUp(Pokemon& p, int pokeIdx, bool allowQueue) {
+    while (p.exp >= expForLevel(p.level + 1)) {
+        p.level++;
+        recalcStats(p);
+        if (p.currentHP > p.maxHP) p.currentHP = p.maxHP;
+        if (p.level % 3 == 0) {
+            int mid = nextLearnableMove(p, pokeIdx);
+            if (mid != 0) {
+                if (p.numMoves < 4) {
+                    // 빈 슬롯 → 즉시 습득
+                    p.moves[p.numMoves].moveId = mid;
+                    p.moves[p.numMoves].pp = getMoveData(mid).maxPP;
+                    p.numMoves++;
+                } else if (allowQueue && state_.learnQueueCnt < 8) {
+                    // 4칸 가득 → 교체 팝업 대기열에 추가 (대상 포켓몬 인덱스 기록)
+                    state_.learnQueuePoke[state_.learnQueueCnt] = pokeIdx;
+                    state_.learnQueue[state_.learnQueueCnt]     = mid;
+                    state_.learnQueueCnt++;
+                } else if (!allowQueue) {
+                    // 팝업 흐름이 없는 경우(포획 등) → 가장 오래된 기술을 밀어내고 자동 습득
+                    for (int k = 0; k < 3; k++) p.moves[k] = p.moves[k + 1];
+                    p.moves[3].moveId = mid;
+                    p.moves[3].pp = getMoveData(mid).maxPP;
+                }
+            }
+        }
+    }
 }
 
 void Battle::checkLevelUp(Pokemon& p) {
@@ -159,18 +290,20 @@ void Battle::checkLevelUp(Pokemon& p) {
         p.level++;
         recalcStats(p);
         if (p.currentHP > p.maxHP) p.currentHP = p.maxHP;
-        // 새 기술 습득
-        for (int i = 0; i < 8; i++) {
-            const LearnMove& lm = p.species->learnset[i];
-            if (lm.level == 0) break;
-            if (lm.level == p.level && p.numMoves < 4) {
-                bool has = false;
-                for (int j = 0; j < p.numMoves; j++)
-                    if (p.moves[j].moveId == lm.moveId) { has = true; break; }
-                if (!has) {
-                    p.moves[p.numMoves].moveId = lm.moveId;
-                    p.moves[p.numMoves].pp = getMoveData(lm.moveId).maxPP;
+        // 3의 배수 레벨마다 새 기술 1개 획득 (learnset 순서대로)
+        if (p.level % 3 == 0) {
+            int mid = nextLearnableMove(p, state_.playerPartyIdx);
+            if (mid != 0) {
+                if (p.numMoves < 4) {
+                    // 빈 슬롯 → 즉시 습득
+                    p.moves[p.numMoves].moveId = mid;
+                    p.moves[p.numMoves].pp = getMoveData(mid).maxPP;
                     p.numMoves++;
+                } else if (state_.learnQueueCnt < 8) {
+                    // 4개 가득 → 교체 팝업 대기열에 추가 (대상 = 막타 포켓몬)
+                    state_.learnQueuePoke[state_.learnQueueCnt] = state_.playerPartyIdx;
+                    state_.learnQueue[state_.learnQueueCnt]     = mid;
+                    state_.learnQueueCnt++;
                 }
             }
         }
@@ -319,8 +452,40 @@ void Battle::update(Key key) {
                 break;
             case 3: // 도망
                 if (state_.type == BattleType::WILD) {
-                    state_.result = BattleResult::ESCAPE;
-                    state_.phase = BattlePhase::DONE;
+                    // ── 원작(Gen1) 도망 확률 공식 ──
+                    // F = (내속도*32) / ((적속도/4) mod 256) + 30*(시도횟수)
+                    // 내속도>적속도 또는 (적속도/4)mod256==0 또는 F>=256 이면 무조건 성공
+                    int mySpe = applyStage(myPoke.spe, myPoke.speStage);
+                    int enSpe = applyStage(en.spe, en.speStage);
+                    state_.escapeAttempts++;
+                    bool escaped;
+                    if (mySpe > enSpe) {
+                        escaped = true;
+                    } else {
+                        int b = (enSpe / 4) % 256;
+                        if (b <= 0) {
+                            escaped = true;
+                        } else {
+                            int f = (mySpe * 32) / b + 30 * (state_.escapeAttempts - 1);
+                            escaped = (f >= 256) || ((rand() % 256) < f);
+                        }
+                    }
+                    if (escaped) {
+                        state_.result = BattleResult::ESCAPE;
+                        swprintf(state_.msg, 128, L"무사히 도망쳤다!");
+                        state_.msg2[0] = 0;
+                        state_.phase = BattlePhase::SHOW_MSG;
+                        state_.awaitKey = true;
+                    } else {
+                        swprintf(state_.msg, 128, L"도망칠 수 없었다!");
+                        state_.msg2[0] = 0;
+                        state_.phase = BattlePhase::SHOW_MSG;
+                        state_.awaitKey = true;
+                        // 도망 실패 = 턴 소모 → SHOW_MSG 후 적 공격
+                        state_.turnStarted    = true;
+                        state_.playerFirst    = true;
+                        state_.enemyWentFirst = false;
+                    }
                 } else {
                     swprintf(state_.msg, 128, L"트레이너 배틀에서는 도망칠 수 없다!");
                     state_.msg2[0] = 0;
@@ -336,7 +501,8 @@ void Battle::update(Key key) {
     case BattlePhase::CHOOSE_ITEM: {
         // 가방 메뉴 — itemMode 0=아이템 선택, 1=상처약 대상 파티 선택
         if (state_.itemMode == 0) {
-            int n = pl_.bagSize;
+            int slots[MAX_BAG_SLOTS];
+            int n = battleBagVisible(slots);
             if (n == 0) {
                 if (key == Key::A || key == Key::B) {
                     state_.phase = BattlePhase::CHOOSE_ACTION;
@@ -344,6 +510,7 @@ void Battle::update(Key key) {
                 }
                 break;
             }
+            if (state_.cursor >= n) state_.cursor = n - 1;
             if (key == Key::UP)   state_.cursor = (state_.cursor - 1 + n) % n;
             if (key == Key::DOWN) state_.cursor = (state_.cursor + 1) % n;
             if (key == Key::B) {
@@ -352,7 +519,7 @@ void Battle::update(Key key) {
                 break;
             }
             if (key == Key::A) {
-                ItemId id = pl_.bag[state_.cursor].id;
+                ItemId id = pl_.bag[slots[state_.cursor]].id;
                 if (id == ITEM_POKE_BALL) {
                     if (state_.type != BattleType::WILD) {
                         swprintf(state_.msg, 128, L"트레이너 배틀에서는 몬스터볼을 쓸 수 없다!");
@@ -369,7 +536,23 @@ void Battle::update(Key key) {
                         : 70 + (pct - 50) * 20 / 50;
                     if (rand() % 100 < catchRate && pl_.partySize < 6) {
                         pl_.party[pl_.partySize++] = en;
+                        // 포켓덱스 포획 횟수 기록
+                        {
+                            int di = speciesIndex(en.species->id);
+                            if (di >= 0) pl_.dexCaught[di]++;
+                        }
                         // HP는 잡힌 상태 그대로 유지 (포켓몬센터에서 회복)
+                        // 포획 시에도 경험치 분배 — 잡은 본인 제외, 기존 파티 전체에 지급
+                        {
+                            int base = en.species->baseExp;
+                            int g = base * en.level / 7;
+                            if (g < 1) g = 1;
+                            for (int i = 0; i < pl_.partySize - 1; i++) {
+                                if (pokemonFainted(pl_.party[i])) continue;
+                                pl_.party[i].exp += g;
+                                silentLevelUp(pl_.party[i], i, false);  // 포획: 팝업 흐름 없음 → 자동
+                            }
+                        }
                         swprintf(state_.msg, 128, L"%ls을(를) 잡았다!", en.species->name);
                         state_.msg2[0] = 0;
                         state_.phase = BattlePhase::SHOW_MSG;
@@ -533,8 +716,9 @@ void Battle::update(Key key) {
     case BattlePhase::SHOW_MSG:
         if (!state_.awaitKey) break;
         if (key == Key::A || key == Key::B) {
-            // 잡기 성공 시 DONE
-            if (state_.result == BattleResult::WIN &&
+            // 잡기 성공 / 도망 성공 시 DONE
+            if ((state_.result == BattleResult::WIN ||
+                 state_.result == BattleResult::ESCAPE) &&
                 state_.type == BattleType::WILD) {
                 state_.phase = BattlePhase::DONE;
                 break;
@@ -588,7 +772,7 @@ void Battle::update(Key key) {
 
     case BattlePhase::FAINT_ENEMY:
         if (key == Key::A || key == Key::B) {
-            // 경험치 메시지
+            // 막타(출전) 포켓몬 경험치/레벨업 처리
             if (state_.expGained) {
                 state_.expGained = false;
                 Pokemon& pp = pl_.party[state_.playerPartyIdx];
@@ -601,35 +785,41 @@ void Battle::update(Key key) {
                     state_.awaitKey = true;
                     break;
                 }
+                // 레벨업 없음 → 막타 경험치 메시지 → 나머지 포켓몬 순차(EXP_OTHERS)
                 swprintf(state_.msg, 128, L"%ls은(는) 경험치 %d를 획득했다!",
                     pp.species->name, state_.expAmount);
                 state_.msg2[0] = 0;
+                state_.phase = BattlePhase::EXP_OTHERS;
+                state_.expOtherIdx = 0;
                 state_.awaitKey = true;
                 break;
             }
-            // 다음 상대 포켓몬?
-            state_.enemyPartyIdx++;
-            if (state_.enemyPartyIdx < state_.enemyPartySize) {
-                state_.enemy = state_.enemyParty[state_.enemyPartyIdx];
-                swprintf(state_.msg, 128, L"%ls! %ls 나와라!",
-                    state_.trainerName ? state_.trainerName : L"",
-                    state_.enemy.species->name);
+            // 경험치 분배 끝 → 다음 상대 또는 승리
+            advanceAfterFaint();
+        }
+        break;
+
+    case BattlePhase::EXP_OTHERS:
+        if (key == Key::A || key == Key::B) {
+            // 막타 외 포켓몬들의 경험치 획득 메시지를 하나씩 출력
+            bool shown = false;
+            while (state_.expOtherIdx < pl_.partySize) {
+                int i = state_.expOtherIdx++;
+                if (i == state_.playerPartyIdx) continue;
+                if (!state_.expGotExp[i]) continue;
+                swprintf(state_.msg, 128, L"%ls은(는) 경험치 %d를 획득했다!",
+                    pl_.party[i].species->name, state_.expGainAmt[i]);
                 state_.msg2[0] = 0;
                 state_.awaitKey = true;
-                state_.phase = BattlePhase::SHOW_MSG;
-                // 다음 SHOW_MSG에서 CHOOSE_ACTION으로
-                state_.playerFirst = true;
-            } else {
-                state_.result = BattleResult::WIN;
-                state_.phase = BattlePhase::VICTORY;
-                if (state_.type == BattleType::BOSS)
-                    swprintf(state_.msg, 128, L"브록을 물리쳤다! 바위배지를 획득!");
-                else if (state_.type == BattleType::TRAINER)
-                    swprintf(state_.msg, 128, L"%ls을(를) 물리쳤다!", state_.trainerName);
+                shown = true;
+                break;
+            }
+            if (!shown) {
+                // 전원 경험치 출력 완료 → 기술 교체 팝업이 있으면 처리, 없으면 다음 상대/승리
+                if (state_.learnQueueCnt > 0)
+                    startLearnMoveQueue();
                 else
-                    swprintf(state_.msg, 128, L"승리했다!");
-                state_.msg2[0] = 0;
-                state_.awaitKey = true;
+                    advanceAfterFaint();
             }
         }
         break;
@@ -659,14 +849,75 @@ void Battle::update(Key key) {
     case BattlePhase::LEVEL_UP_MSG:
         if (key == Key::A || key == Key::B) {
             Pokemon& pp = pl_.party[state_.playerPartyIdx];
+            // 막타 경험치 메시지 → 나머지 포켓몬 순차(EXP_OTHERS).
+            // 기술 교체 팝업(LEARN_MOVE)은 경험치 메시지가 모두 끝난 뒤 일괄 처리.
             swprintf(state_.msg, 128, L"%ls은(는) 경험치 %d를 획득했다!",
                 pp.species->name, state_.expAmount);
             state_.msg2[0] = 0;
-            state_.phase = BattlePhase::FAINT_ENEMY;
+            state_.phase = BattlePhase::EXP_OTHERS;
+            state_.expOtherIdx = 0;
             state_.expGained = false;
             state_.awaitKey = true;
         }
         break;
+
+    case BattlePhase::LEARN_MOVE: {
+        Pokemon& pp = pl_.party[state_.learnQueuePoke[state_.learnQueueIdx]];
+        int mvId = state_.learnQueue[state_.learnQueueIdx];
+        if (state_.learnSubPhase == 0) {
+            // 안내 메시지 → A → 잊을 기술 선택
+            if (key == Key::A || key == Key::B) {
+                state_.learnSubPhase     = 1;
+                state_.learnForgetCursor = 0;
+            }
+        } else if (state_.learnSubPhase == 1) {
+            // 잊을 기술 선택 (0~numMoves-1 = 기술, numMoves = 포기)
+            int nOpt = pp.numMoves + 1;
+            if (key == Key::UP)   state_.learnForgetCursor = (state_.learnForgetCursor - 1 + nOpt) % nOpt;
+            if (key == Key::DOWN) state_.learnForgetCursor = (state_.learnForgetCursor + 1) % nOpt;
+            if (key == Key::B || (key == Key::A && state_.learnForgetCursor >= pp.numMoves)) {
+                // 포기
+                swprintf(state_.msg, 128, L"%ls은(는) %ls을(를) 배우지 않았다.",
+                    pp.species->name, getMoveData(mvId).name);
+                state_.msg2[0] = 0;
+                state_.learnSubPhase = 2;
+                state_.awaitKey = true;
+            } else if (key == Key::A) {
+                // 선택한 슬롯의 기술을 새 기술로 교체
+                int slot  = state_.learnForgetCursor;
+                int oldId = pp.moves[slot].moveId;
+                pp.moves[slot].moveId = mvId;
+                pp.moves[slot].pp     = getMoveData(mvId).maxPP;
+                swprintf(state_.msg, 128, L"%ls은(는) %ls을(를) 잊고",
+                    pp.species->name, getMoveData(oldId).name);
+                swprintf(state_.msg2, 128, L"새로운 기술 %ls을(를) 배웠다!", getMoveData(mvId).name);
+                state_.learnSubPhase = 2;
+                state_.awaitKey = true;
+            }
+        } else {
+            // subPhase 2: 결과 메시지 → 다음 큐 또는 종료
+            if (key == Key::A || key == Key::B) {
+                state_.learnQueueIdx++;
+                if (state_.learnQueueIdx < state_.learnQueueCnt) {
+                    // 다음 교체 대기 항목 (대상 포켓몬이 다를 수 있음)
+                    state_.learnSubPhase     = 0;
+                    state_.learnForgetCursor = 0;
+                    int nextPoke = state_.learnQueuePoke[state_.learnQueueIdx];
+                    int nextId   = state_.learnQueue[state_.learnQueueIdx];
+                    swprintf(state_.msg, 128, L"%ls은(는) 새로운 기술 %ls을(를) 배우고 싶어한다!",
+                        pl_.party[nextPoke].species->name, getMoveData(nextId).name);
+                    swprintf(state_.msg2, 128, L"하지만 기술은 4개까지만 배울 수 있다!");
+                    state_.awaitKey = true;
+                } else {
+                    // 모든 교체 처리 완료 → 다음 상대 또는 승리
+                    state_.learnQueueCnt = 0;
+                    state_.learnQueueIdx = 0;
+                    advanceAfterFaint();
+                }
+            }
+        }
+        break;
+    }
 
     case BattlePhase::VICTORY:
         if (key == Key::A || key == Key::B)
@@ -751,9 +1002,12 @@ void Battle::render() {
         ren_.drawBox(boxX, boxY, boxW, boxH, std::string(Color::BG_BLACK) + Color::WHITE);
         ren_.fillRect(boxX+1, boxY+1, boxW-2, boxH-2, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
         if (state_.itemMode == 0) {
-            for (int i = 0; i < pl_.bagSize; i++) {
-                int cy = boxY + 3 + i * 2;
-                bool isCur = (i == state_.cursor);
+            int slots[MAX_BAG_SLOTS];
+            int n = battleBagVisible(slots);
+            for (int vi = 0; vi < n; vi++) {
+                int i = slots[vi];
+                int cy = boxY + 3 + vi * 2;
+                bool isCur = (vi == state_.cursor);
                 std::string cc = std::string(Color::BG_BLACK) +
                     (isCur ? Color::BRIGHT_YELLOW : Color::WHITE);
                 if (isCur) ren_.print(boxX+2, cy, ">", cc);
@@ -878,14 +1132,17 @@ void Battle::renderKorean() {
         if (state_.itemMode == 0) {
             ren_.printW(boxX + 2, boxY + 1, L"가방:",
                 std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW);
-            if (pl_.bagSize == 0) {
+            int slots[MAX_BAG_SLOTS];
+            int n = battleBagVisible(slots);
+            if (n == 0) {
                 ren_.printW(boxX + 4, boxY + 4, L"가방이 비어있다.",
                     std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
             } else {
-                for (int i = 0; i < pl_.bagSize; i++) {
-                    int cy = boxY + 3 + i * 2;
+                for (int vi = 0; vi < n; vi++) {
+                    int i = slots[vi];
+                    int cy = boxY + 3 + vi * 2;
                     std::string cc = std::string(Color::BG_BLACK) +
-                        (i == state_.cursor ? Color::BRIGHT_YELLOW : Color::WHITE);
+                        (vi == state_.cursor ? Color::BRIGHT_YELLOW : Color::WHITE);
                     ren_.printW(boxX + 4, cy, getItemName(pl_.bag[i].id), cc);
                 }
             }
@@ -1009,13 +1266,40 @@ void Battle::renderKorean() {
         state_.phase == BattlePhase::FAINT_PLAYER ||
         state_.phase == BattlePhase::LEVEL_UP_MSG ||
         state_.phase == BattlePhase::VICTORY ||
-        state_.phase == BattlePhase::DEFEAT) {
+        state_.phase == BattlePhase::DEFEAT ||
+        state_.phase == BattlePhase::EXP_OTHERS ||
+        (state_.phase == BattlePhase::LEARN_MOVE && state_.learnSubPhase != 1)) {
         ren_.printW(boxX + 2, boxY + 2, state_.msg, BG_PAPER + Color::BLACK);
         if (state_.msg2[0])
             ren_.printW(boxX + 2, boxY + 3, state_.msg2, BG_PAPER + Color::RED);
         if (state_.awaitKey)
             ren_.printW(boxX + 2, boxY + boxH - 2, L"[ Z / Enter: 계속 ]",
                 BG_PAPER + Color::BRIGHT_BLACK);
+    }
+
+    // ── 기술 교체 선택 (LEARN_MOVE, subPhase 1) ────────────────
+    if (state_.phase == BattlePhase::LEARN_MOVE && state_.learnSubPhase == 1) {
+        Pokemon& lp = pl_.party[state_.learnQueuePoke[state_.learnQueueIdx]];
+        int newId = state_.learnQueue[state_.learnQueueIdx];
+        swprintf(buf, 64, L"%ls의 잊을 기술:", getMoveData(newId).name);
+        ren_.printW(boxX + 2, boxY + 1, buf, BG_PAPER + Color::BLACK);
+        for (int i = 0; i < lp.numMoves; i++) {
+            int cx = boxX + 4 + (i % 2) * 16;
+            int cy = boxY + 2 + (i / 2);
+            const MoveData& mv = getMoveData(lp.moves[i].moveId);
+            std::string cc = BG_PAPER +
+                (state_.learnForgetCursor == i ? Color::RED : Color::BLACK);
+            if (state_.learnForgetCursor == i) ren_.print(cx - 2, cy, ">", cc);
+            ren_.printW(cx, cy, mv.name, cc);
+        }
+        // 포기 옵션 (index = numMoves)
+        int gi = lp.numMoves;
+        int gcx = boxX + 4 + (gi % 2) * 16;
+        int gcy = boxY + 2 + (gi / 2);
+        std::string gcc = BG_PAPER +
+            (state_.learnForgetCursor == gi ? Color::RED : Color::BLACK);
+        if (state_.learnForgetCursor == gi) ren_.print(gcx - 2, gcy, ">", gcc);
+        ren_.printW(gcx, gcy, L"배우지 않기", gcc);
     }
 
     // ── 기술 이름 (CHOOSE_MOVE) ───────────────────────────────
