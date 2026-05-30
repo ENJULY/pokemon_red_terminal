@@ -566,18 +566,29 @@ void Overworld::update(Key key) {
                 if (npc->trigger == 2) {
                     state_.pendingEvent = OwEvent::NURSE_HEAL;
                 }
-                // 소포 수령 (gotParcel)
+                // 소포 수령 (gotParcel) — 첫 수령 직후엔 상점 열지 않음
+                bool parcelJustGiven = false;
                 if (npc->trigger == 3 && state_.mapId == MAP_VIRIDIAN_MART && !pl_.gotParcel) {
                     pl_.gotParcel = true;
+                    parcelJustGiven = true;
                 }
                 // 오박사 소포 전달 완료
                 if (npc->tag == NPC_TAG_OAK_LAB && pl_.gotParcel && !pl_.deliveredParcel) {
                     pl_.deliveredParcel = true;
-                    // 퀘스트 보상 연동 위치 — ITEM_SYSTEM_INTEGRATION.md 참고
+                    addItem(pl_, ITEM_POTION, 3);  // 퀘스트 보상: 상처약 3개
                 }
                 // 블루 배틀 후 대화 완료 → 연구소에서 사라짐
                 if (npc->tag == NPC_TAG_BLUE_LAB && pl_.beatenRival1 && !pl_.rivalLabTalked) {
                     pl_.rivalLabTalked = true;
+                }
+                // 마트 점원 → 상점 진입
+                if (npc->martId > 0 && !parcelJustGiven) {
+                    // 상록(MART_VIRIDIAN=1): gotParcel 후만, 회색(MART_PEWTER=2): 항상
+                    bool canShop = (npc->martId == 2) || pl_.gotParcel;
+                    if (canShop) {
+                        state_.pendingEvent = OwEvent::ENTER_MART_SHOP;
+                        state_.eventData = npc->martId;
+                    }
                 }
             }
         }

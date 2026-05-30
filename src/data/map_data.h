@@ -37,6 +37,7 @@ struct NpcDef {
     int spriteId = 0;
     int trigger  = 0;
     int tag      = 0;
+    int martId   = 0;  // >0 이면 대화 후 상점 진입 (player.h::MartId)
 };
 
 struct TrainerDef {
@@ -51,6 +52,7 @@ struct TrainerDef {
     int spriteId = 11;       // OW 모양 — 기본 GENTLEMAN
     int introSpriteId = 0;   // 배틀 시작 시 풀바디 IntroSprite (0=OAK, 1=RIVAL, ...)
     bool isBoss = false;     // 체육관 관장(브록 등) 표시 — BOSS_BATTLE 트리거
+    int prize = 0;           // 격파 시 상금 ($). 0이면 기본값(일반 100, isBoss 1000)
 };
 
 struct WarpDef {
@@ -1088,7 +1090,7 @@ inline MapDef MAP_13 = {
             L"점원: 잠시만, 여기 소포가 있단다.",
             L"[소포를 받았다!]  오박사님께 전해드려.",
             nullptr
-        }, NPC_SPR_CLERK, 3, NPC_TAG_VIRIDIAN_CLERK},
+        }, NPC_SPR_CLERK, 3, NPC_TAG_VIRIDIAN_CLERK, 1 /* MART_VIRIDIAN */},
     }, 1,  // npcs
     {}, 0,  // trainers
     {
@@ -1123,9 +1125,9 @@ inline MapDef MAP_14 = {
         {0, 5, {
             L"점원: 어서오세요!",
             L"프렌들리숍에 오신 것을 환영합니다.",
-            L"(상점 기능은 아직 구현 중...)",
+            L"무엇을 도와드릴까요?",
             nullptr
-        }, NPC_SPR_CLERK, 0},
+        }, NPC_SPR_CLERK, 0, 0, 2 /* MART_PEWTER */},
     }, 1,  // npcs
     {}, 0,  // trainers
     {

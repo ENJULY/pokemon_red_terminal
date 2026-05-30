@@ -308,35 +308,10 @@ void Battle::update(Key key) {
                 state_.phase = BattlePhase::CHOOSE_MOVE;
                 state_.cursor = 0;
                 break;
-            case 1: // 가방 (몬스터볼만 구현)
-                if (state_.type == BattleType::WILD && pl_.pokeballs > 0) {
-                    pl_.pokeballs--;
-                    int catchRate = 50 + (en.maxHP - en.currentHP) * 100 / en.maxHP;
-                    if (rand() % 100 < catchRate && pl_.partySize < 6) {
-                        pl_.party[pl_.partySize++] = en;
-                        pl_.party[pl_.partySize-1].currentHP = pl_.party[pl_.partySize-1].maxHP;
-                        swprintf(state_.msg, 128, L"%ls을(를) 잡았다!", en.species->name);
-                        state_.msg2[0] = 0;
-                        state_.phase = BattlePhase::SHOW_MSG;
-                        state_.awaitKey = true;
-                        state_.result = BattleResult::WIN;
-                    } else {
-                        swprintf(state_.msg, 128, L"아, 아쉽다! 조금만 더!");
-                        state_.msg2[0] = 0;
-                        state_.phase = BattlePhase::SHOW_MSG;
-                        state_.awaitKey = true;
-                    }
-                } else if (state_.type != BattleType::WILD) {
-                    swprintf(state_.msg, 128, L"트레이너 배틀에서는 몬스터볼을 쓸 수 없다!");
-                    state_.msg2[0] = 0;
-                    state_.phase = BattlePhase::SHOW_MSG;
-                    state_.awaitKey = true;
-                } else {
-                    swprintf(state_.msg, 128, L"몬스터볼이 없다!");
-                    state_.msg2[0] = 0;
-                    state_.phase = BattlePhase::SHOW_MSG;
-                    state_.awaitKey = true;
-                }
+            case 1: // 가방
+                state_.phase = BattlePhase::CHOOSE_ITEM;
+                state_.cursor = 0;
+                state_.itemMode = 0;  // 0=아이템 선택, 1=상처약 대상 파티 선택
                 break;
             case 2: // 포켓몬 교체
                 state_.phase = BattlePhase::CHOOSE_POKEMON;
@@ -353,6 +328,116 @@ void Battle::update(Key key) {
                     state_.awaitKey = true;
                 }
                 break;
+            }
+        }
+        break;
+    }
+
+    case BattlePhase::CHOOSE_ITEM: {
+        // 가방 메뉴 — itemMode 0=아이템 선택, 1=상처약 대상 파티 선택
+        if (state_.itemMode == 0) {
+            int n = pl_.bagSize;
+            if (n == 0) {
+                if (key == Key::A || key == Key::B) {
+                    state_.phase = BattlePhase::CHOOSE_ACTION;
+                    state_.cursor = 0;
+                }
+                break;
+            }
+            if (key == Key::UP)   state_.cursor = (state_.cursor - 1 + n) % n;
+            if (key == Key::DOWN) state_.cursor = (state_.cursor + 1) % n;
+            if (key == Key::B) {
+                state_.phase = BattlePhase::CHOOSE_ACTION;
+                state_.cursor = 0;
+                break;
+            }
+            if (key == Key::A) {
+                ItemId id = pl_.bag[state_.cursor].id;
+                if (id == ITEM_POKE_BALL) {
+                    if (state_.type != BattleType::WILD) {
+                        swprintf(state_.msg, 128, L"트레이너 배틀에서는 몬스터볼을 쓸 수 없다!");
+                        state_.msg2[0] = 0;
+                        state_.phase = BattlePhase::SHOW_MSG;
+                        state_.awaitKey = true;
+                        break;
+                    }
+                    removeItem(pl_, ITEM_POKE_BALL, 1);
+                    // 풀HP 30%, 반HP 70%, 25%HP 80%, 빈사 90%
+                    int pct = (en.maxHP - en.currentHP) * 100 / en.maxHP;
+                    int catchRate = (pct <= 50)
+                        ? 30 + pct * 40 / 50
+                        : 70 + (pct - 50) * 20 / 50;
+                    if (rand() % 100 < catchRate && pl_.partySize < 6) {
+                        pl_.party[pl_.partySize++] = en;
+                        // HP는 잡힌 상태 그대로 유지 (포켓몬센터에서 회복)
+                        swprintf(state_.msg, 128, L"%ls을(를) 잡았다!", en.species->name);
+                        state_.msg2[0] = 0;
+                        state_.phase = BattlePhase::SHOW_MSG;
+                        state_.awaitKey = true;
+                        state_.result = BattleResult::WIN;
+                    } else {
+                        swprintf(state_.msg, 128, L"아, 아쉽다! 조금만 더!");
+                        state_.msg2[0] = 0;
+                        state_.phase = BattlePhase::SHOW_MSG;
+                        state_.awaitKey = true;
+                        // 포획 실패 = 턴 소모 → SHOW_MSG 후 적 공격
+                        state_.turnStarted    = true;
+                        state_.playerFirst    = true;
+                        state_.enemyWentFirst = false;
+                    }
+                } else if (id == ITEM_POTION) {
+                    state_.itemMode = 1;
+                    state_.cursor = state_.playerPartyIdx;
+                }
+            }
+        } else {
+            // itemMode == 1: 상처약 대상 파티 선택
+            int n = pl_.partySize;
+            if (key == Key::UP)   state_.cursor = (state_.cursor - 1 + n) % n;
+            if (key == Key::DOWN) state_.cursor = (state_.cursor + 1) % n;
+            if (key == Key::B) {
+                state_.itemMode = 0;
+                state_.cursor = 0;
+                break;
+            }
+            if (key == Key::A) {
+                Pokemon& tgt = pl_.party[state_.cursor];
+                if (!tgt.species) {
+                    // 빈 슬롯 — 무시
+                    break;
+                }
+                if (tgt.currentHP <= 0) {
+                    swprintf(state_.msg, 128, L"쓰러진 포켓몬에겐 효과가 없다!");
+                    state_.msg2[0] = 0;
+                    state_.phase = BattlePhase::SHOW_MSG;
+                    state_.awaitKey = true;
+                    state_.itemMode = 0;
+                    state_.cursor = 0;
+                    break;
+                }
+                if (tgt.currentHP >= tgt.maxHP) {
+                    swprintf(state_.msg, 128, L"HP가 가득 차 있다!");
+                    state_.msg2[0] = 0;
+                    state_.phase = BattlePhase::SHOW_MSG;
+                    state_.awaitKey = true;
+                    state_.itemMode = 0;
+                    state_.cursor = 0;
+                    break;
+                }
+                int heal = POTION_HEAL_AMOUNT;
+                if (tgt.currentHP + heal > tgt.maxHP) heal = tgt.maxHP - tgt.currentHP;
+                tgt.currentHP += heal;
+                removeItem(pl_, ITEM_POTION, 1);
+                swprintf(state_.msg, 128, L"%ls의 HP가 %d 회복됐다!", tgt.species->name, heal);
+                state_.msg2[0] = 0;
+                state_.phase = BattlePhase::SHOW_MSG;
+                state_.awaitKey = true;
+                state_.itemMode = 0;
+                state_.cursor = 0;
+                // 상처약 사용 = 턴 소모 → SHOW_MSG 후 적 공격
+                state_.turnStarted    = true;
+                state_.playerFirst    = true;
+                state_.enemyWentFirst = false;
             }
         }
         break;
@@ -660,6 +745,38 @@ void Battle::render() {
     Pokemon& myPoke = pl_.party[state_.playerPartyIdx];
     Pokemon& en     = state_.enemy;
 
+    // ── 가방 화면 (CHOOSE_ITEM) ───────────────────────────────
+    if (state_.phase == BattlePhase::CHOOSE_ITEM) {
+        int boxH = H - 2, boxW = 40, boxX = (W - 40) / 2, boxY = 1;
+        ren_.drawBox(boxX, boxY, boxW, boxH, std::string(Color::BG_BLACK) + Color::WHITE);
+        ren_.fillRect(boxX+1, boxY+1, boxW-2, boxH-2, ' ', std::string(Color::BG_BLACK) + Color::WHITE);
+        if (state_.itemMode == 0) {
+            for (int i = 0; i < pl_.bagSize; i++) {
+                int cy = boxY + 3 + i * 2;
+                bool isCur = (i == state_.cursor);
+                std::string cc = std::string(Color::BG_BLACK) +
+                    (isCur ? Color::BRIGHT_YELLOW : Color::WHITE);
+                if (isCur) ren_.print(boxX+2, cy, ">", cc);
+                char cntStr[16];
+                snprintf(cntStr, sizeof(cntStr), "x%d", pl_.bag[i].count);
+                ren_.print(boxX + boxW - 8, cy, cntStr, std::string(Color::BG_BLACK) + Color::WHITE);
+            }
+        } else {
+            for (int i = 0; i < pl_.partySize; i++) {
+                int cy = boxY + 3 + i * 2;
+                bool isCur = (i == state_.cursor);
+                std::string cc = std::string(Color::BG_BLACK) +
+                    (isCur ? Color::BRIGHT_YELLOW : Color::WHITE);
+                if (isCur) ren_.print(boxX+2, cy, ">", cc);
+                char hpStr[32];
+                snprintf(hpStr, sizeof(hpStr), "HP:%d/%d",
+                    pl_.party[i].currentHP, pl_.party[i].maxHP);
+                ren_.print(boxX + boxW - 14, cy, hpStr, std::string(Color::BG_BLACK) + Color::WHITE);
+            }
+        }
+        return;
+    }
+
     // ── 포켓몬 교체 화면 ──────────────────────────────────────
     if (state_.phase == BattlePhase::CHOOSE_POKEMON) {
         int boxH = H - 2, boxW = 40, boxX = (W - 40) / 2, boxY = 1;
@@ -753,6 +870,43 @@ void Battle::renderKorean() {
 
     Pokemon& myPoke = pl_.party[state_.playerPartyIdx];
     Pokemon& en     = state_.enemy;
+
+    // ── 가방 화면 한글 (CHOOSE_ITEM) ──────────────────────────
+    if (state_.phase == BattlePhase::CHOOSE_ITEM) {
+        int boxX = (W - 40) / 2;
+        int boxY = 1;
+        if (state_.itemMode == 0) {
+            ren_.printW(boxX + 2, boxY + 1, L"가방:",
+                std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW);
+            if (pl_.bagSize == 0) {
+                ren_.printW(boxX + 4, boxY + 4, L"가방이 비어있다.",
+                    std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+            } else {
+                for (int i = 0; i < pl_.bagSize; i++) {
+                    int cy = boxY + 3 + i * 2;
+                    std::string cc = std::string(Color::BG_BLACK) +
+                        (i == state_.cursor ? Color::BRIGHT_YELLOW : Color::WHITE);
+                    ren_.printW(boxX + 4, cy, getItemName(pl_.bag[i].id), cc);
+                }
+            }
+            ren_.printW(boxX + 2, H - 3, L"[Z]: 사용  [B]: 취소",
+                std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+        } else {
+            ren_.printW(boxX + 2, boxY + 1, L"상처약: 누구에게?",
+                std::string(Color::BG_BLACK) + Color::BRIGHT_YELLOW);
+            for (int i = 0; i < pl_.partySize; i++) {
+                int cy = boxY + 3 + i * 2;
+                std::string cc = std::string(Color::BG_BLACK) +
+                    (i == state_.cursor ? Color::BRIGHT_YELLOW : Color::WHITE);
+                if (pl_.party[i].species) {
+                    ren_.printW(boxX + 4, cy, pl_.party[i].species->name, cc);
+                }
+            }
+            ren_.printW(boxX + 2, H - 3, L"[Z]: 사용  [B]: 뒤로",
+                std::string(Color::BG_BLACK) + Color::BRIGHT_BLACK);
+        }
+        return;
+    }
 
     // ── 포켓몬 교체 화면 한글 ─────────────────────────────────
     if (state_.phase == BattlePhase::CHOOSE_POKEMON) {
