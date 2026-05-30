@@ -30,6 +30,9 @@ enum NpcTag {
     NPC_TAG_BALL_CHARMANDER= 4, // 파이리 몬스터볼
     NPC_TAG_BALL_SQUIRTLE  = 5, // 꼬부기 몬스터볼
     NPC_TAG_VIRIDIAN_CLERK = 6, // 상록 마트 점원 (gotParcel 후 대사 변경)
+    NPC_TAG_ITEMBALL_POTION   = 7, // 필드 포켓볼 → 상처약 1개 (획득 후 숨김)
+    NPC_TAG_ITEMBALL_POKEBALL = 8, // 필드 포켓볼 → 몬스터볼 1개 (획득 후 숨김)
+    NPC_TAG_ITEMBALL_CANDY    = 9, // 필드 포켓볼 → 이상한사탕 1개 (획득 후 숨김)
 };
 struct NpcDef {
     int x, y;
@@ -463,17 +466,17 @@ inline MapDef MAP_3 = {
             nullptr
         }, NPC_SPR_GENTLEMAN},
 
-        // 2번도로 아이템볼 1
+        // 2번도로 아이템볼 1 → 이상한사탕
         {13, 54, {
-            L"문스톤을 발견했다.",
+            L"포켓볼을 주웠다! 안에 이상한사탕이 들어있다!",
             nullptr
-        }, NPC_SPR_POKE_BALL},
+        }, NPC_SPR_POKE_BALL, 0, NPC_TAG_ITEMBALL_CANDY},
 
-        // 2번도로 아이템볼 2
+        // 2번도로 아이템볼 2 → 이상한사탕
         {13, 45, {
-            L"HP에이드를 발견했다.",
+            L"포켓볼을 주웠다! 안에 이상한사탕이 들어있다!",
             nullptr
-        }, NPC_SPR_POKE_BALL},
+        }, NPC_SPR_POKE_BALL, 0, NPC_TAG_ITEMBALL_CANDY},
     }, 3,  // npcs
     {}, 0,  // trainers
     {
@@ -567,23 +570,23 @@ inline MapDef MAP_4 = {
             nullptr
         }, NPC_SPR_LITTLE_BOY},
 
-        // 상록숲 아이템볼(해독제)
+        // 상록숲 아이템볼 → 이상한사탕
         {25, 11, {
-            L"해독제를 찾았다!",
+            L"포켓볼을 주웠다! 안에 이상한사탕이 들어있다!",
             nullptr
-        }, NPC_SPR_POKE_BALL},
+        }, NPC_SPR_POKE_BALL, 0, NPC_TAG_ITEMBALL_CANDY},
 
-        // 상록숲 아이템볼(HP포션)
+        // 상록숲 아이템볼 → 이상한사탕
         {12, 29, {
-            L"HP포션을 찾았다!",
+            L"포켓볼을 주웠다! 안에 이상한사탕이 들어있다!",
             nullptr
-        }, NPC_SPR_POKE_BALL},
+        }, NPC_SPR_POKE_BALL, 0, NPC_TAG_ITEMBALL_CANDY},
 
-        // 상록숲 아이템볼(포켓몬볼)
+        // 상록숲 아이템볼 → 이상한사탕
         {1, 31, {
-            L"포켓몬볼을 찾았다!",
+            L"포켓볼을 주웠다! 안에 이상한사탕이 들어있다!",
             nullptr
-        }, NPC_SPR_POKE_BALL},
+        }, NPC_SPR_POKE_BALL, 0, NPC_TAG_ITEMBALL_CANDY},
     }, 5,  // npcs
     {
         // pokered VIRIDIANFOREST_YOUNGSTER2 (30, 33) facing LEFT — BugCatcher #1

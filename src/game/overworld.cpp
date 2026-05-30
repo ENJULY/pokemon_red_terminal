@@ -71,6 +71,11 @@ bool Overworld::isNpcHidden(const NpcDef& npc) const {
     if (npc.tag == NPC_TAG_BALL_CHARMANDER && pl_.starterIdx == 1) return true;
     if (npc.tag == NPC_TAG_BALL_SQUIRTLE   && pl_.starterIdx == 2) return true;
     if (npc.tag == NPC_TAG_BLUE_LAB && pl_.rivalLabTalked)         return true;
+    // 획득 완료한 필드 포켓볼 → 숨김 (그 자리 바닥 타일이 보임)
+    if ((npc.tag == NPC_TAG_ITEMBALL_POTION ||
+         npc.tag == NPC_TAG_ITEMBALL_POKEBALL ||
+         npc.tag == NPC_TAG_ITEMBALL_CANDY)
+        && isItemBallTaken(pl_, state_.mapId, npc.x, npc.y)) return true;
     return false;
 }
 
@@ -376,9 +381,12 @@ void Overworld::tryMove(int dx, int dy) {
         return;
     }
 
-    // NPC/트레이너 충돌 — 같은 좌표에 NPC가 있으면 차단
+    // NPC/트레이너 충돌 — 같은 좌표에 NPC가 있으면 차단 (숨김 NPC는 통과)
     for (int i = 0; i < m->numNpcs; i++) {
-        if (m->npcs[i].x == nx && m->npcs[i].y == ny) return;
+        if (m->npcs[i].x == nx && m->npcs[i].y == ny) {
+            if (isNpcHidden(m->npcs[i])) continue;
+            return;
+        }
     }
     for (int i = 0; i < m->numTrainers; i++) {
         if (!m->trainers[i].defeated &&
@@ -580,6 +588,22 @@ void Overworld::update(Key key) {
                 // 블루 배틀 후 대화 완료 → 연구소에서 사라짐
                 if (npc->tag == NPC_TAG_BLUE_LAB && pl_.beatenRival1 && !pl_.rivalLabTalked) {
                     pl_.rivalLabTalked = true;
+                }
+                // 필드 포켓볼 → 아이템 획득 후 숨김 (그 자리 바닥 타일로 보임)
+                if (npc->tag == NPC_TAG_ITEMBALL_POTION &&
+                    !isItemBallTaken(pl_, state_.mapId, npc->x, npc->y)) {
+                    addItem(pl_, ITEM_POTION, 1);
+                    addItemBall(pl_, state_.mapId, npc->x, npc->y);
+                }
+                if (npc->tag == NPC_TAG_ITEMBALL_POKEBALL &&
+                    !isItemBallTaken(pl_, state_.mapId, npc->x, npc->y)) {
+                    addItem(pl_, ITEM_POKE_BALL, 1);
+                    addItemBall(pl_, state_.mapId, npc->x, npc->y);
+                }
+                if (npc->tag == NPC_TAG_ITEMBALL_CANDY &&
+                    !isItemBallTaken(pl_, state_.mapId, npc->x, npc->y)) {
+                    addItem(pl_, ITEM_RARE_CANDY, 1);
+                    addItemBall(pl_, state_.mapId, npc->x, npc->y);
                 }
                 // 마트 점원 → 상점 진입
                 if (npc->martId > 0 && !parcelJustGiven) {
