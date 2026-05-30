@@ -15,6 +15,8 @@ enum class BattlePhase {
     EXECUTE_ENEMY,   // 적 행동 실행
     SHOW_MSG,        // 메시지 표시 후 다음 단계로
     LEVEL_UP_MSG,    // 레벨업 메시지
+    LEARN_MOVE,      // 기술 4개 가득 찼을 때 교체 팝업
+    EXP_OTHERS,      // 막타 외 포켓몬들의 경험치 획득 메시지 순차 표시
     FAINT_PLAYER,    // 내 포켓몬 기절
     FAINT_ENEMY,     // 적 포켓몬 기절
     VICTORY,         // 승리
@@ -36,6 +38,7 @@ struct BattleState {
     const wchar_t* trainerName;
     const wchar_t* trainerPreText; // 배틀 전 대사
     int            trainerIntroId; // 풀바디 스프라이트 ID (0=OAK,1=RIVAL,2=RED,3=BROCK,4=BUG_CATCHER,5=COOLTRAINER_M)
+    int            trainerPrize;   // 격파 시 상금 ($) — 트레이너/보스 승리 시 지급
 
     int          playerPartyIdx; // 현재 내 포켓몬 인덱스
 
@@ -56,8 +59,22 @@ struct BattleState {
     bool         leveledUp;
     int          newLevel;
 
+    // 경험치 전체 분배 — 포켓몬별 획득량/획득여부, 순차 메시지 인덱스
+    int          expGainAmt[6];   // 각 파티 슬롯이 이번에 받은 경험치
+    bool         expGotExp[6];    // 받았는지(살아있어 분배 대상)
+    int          expOtherIdx;     // EXP_OTHERS 순차 출력 진행 인덱스
+
     bool         enemyWentFirst;   // static 제거 → 인스턴스 멤버
     bool         switchAfterFaint; // 기절 후 강제 교체 여부
+    int          escapeAttempts;   // 이번 배틀 도망 시도 횟수 (원작 도망 확률용)
+
+    // 기술 교체 팝업 (LEARN_MOVE) — 막타/비막타 포켓몬 공용
+    int          learnQueue[8];    // 레벨업으로 배울 기술 ID 대기열 (4개 가득 찬 경우)
+    int          learnQueuePoke[8];// 각 대기열 항목의 대상 포켓몬 파티 인덱스
+    int          learnQueueCnt;    // 대기열 개수
+    int          learnQueueIdx;    // 현재 처리 중인 대기열 인덱스
+    int          learnForgetCursor;// 잊을 기술 선택 커서 (0~3 기술, 4=포기)
+    int          learnSubPhase;    // 0=안내 메시지, 1=잊을 기술 선택, 2=결과 메시지
 
     int          itemMode;              // CHOOSE_ITEM 서브상태: 0=아이템선택, 1=상처약 파티 대상 선택
     int          frame;
@@ -75,7 +92,7 @@ public:
     // 트레이너 배틀 시작 (introId=풀바디 스프라이트 인덱스, 기본 0=OAK)
     void startTrainer(const wchar_t* name, const wchar_t* preText,
                       int* partyIds, int* partyLevels, int partySize,
-                      int introId = 0);
+                      int introId = 0, int prize = 0);
     // 보스(브록) 배틀
     void startBrock();
 
@@ -99,8 +116,13 @@ private:
     void applyDamage(Pokemon& attacker, Pokemon& defender, int moveId, bool& superEff, bool& notEff, bool& noEff, int& damage);
     void applyStatEffect(Pokemon& target, int effect);
     void checkFaint();
+    int  battleBagVisible(int* outSlots) const;  // 전투에서 보이는 가방 슬롯(이상한사탕 등 제외) — 개수 반환
     void grantExp();
+    void advanceAfterFaint();           // 적 기절 후 다음 상대 또는 승리 처리
     void checkLevelUp(Pokemon& p);
+    void silentLevelUp(Pokemon& p, int pokeIdx, bool allowQueue = true); // 막타 외 — 레벨업(4칸 가득: allowQueue면 교체 큐, 아니면 FIFO 자동)
+    int  nextLearnableMove(Pokemon& p, int pokeIdx); // learnset 순서상 아직 안 배운 다음 기술 (없으면 0)
+    void startLearnMoveQueue();         // 경험치 메시지 후 기술 교체 팝업 큐 처리 시작
     int  chooseEnemyMove();
     void drawHPBar(int x, int y, int cur, int maxHP, const std::string& color);
     void drawSprite(int x, int y, int speciesId, bool back);
