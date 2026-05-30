@@ -31,6 +31,7 @@ SEMITONE = {  # pokered note 토큰 -> 반음(0..11)
 
 # 게임에서 실제로 쓰이는 곡만: pokered Music_라벨 -> 출력 파일명
 SONGS = {
+    'Music_IntroBattle':       'introbattle',
     'Music_TitleScreen':       'title',
     'Music_OaksLab':           'oakslab',
     'Music_PalletTown':        'pallettown',

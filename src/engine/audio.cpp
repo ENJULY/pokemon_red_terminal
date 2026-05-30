@@ -51,7 +51,7 @@ void Audio::volumeDown() {
 
 int Audio::volumePercent() { return g_volPct; }
 
-void Audio::playBGM(const std::string& name) {
+void Audio::playBGM(const std::string& name, bool loop) {
     // 같은 곡이 이미 재생 중이면 그대로 둔다 (맵 이동 시 끊김 방지)
     if (g_bgmOpen && g_curBGM == name) return;
 
@@ -72,7 +72,7 @@ void Audio::playBGM(const std::string& name) {
     // 루프는 아래 update() 의 상태 폴링으로 직접 처리한다.
     mci("play bgm");
     g_bgmOpen = true;
-    g_bgmLoop = true;
+    g_bgmLoop = loop;
     g_curBGM  = name;
 }
 
@@ -103,6 +103,23 @@ void Audio::update() {
         mci("seek bgm to start");
         mci("play bgm");
     }
+}
+
+// 현재 BGM 모드 질의 헬퍼 ("playing"/"stopped"/"paused"/...).
+static bool bgmModeIs(const char* want) {
+    if (!g_bgmOpen) return false;
+    char mode[64] = {0};
+    mciSendStringA("status bgm mode", mode, sizeof(mode), nullptr);
+    return mode[0] && lstrcmpiA(mode, want) == 0;
+}
+
+bool Audio::bgmPlaying() { return bgmModeIs("playing"); }
+
+// 비루프(loop=false) BGM 이 끝까지 재생되어 멈췄으면 true.
+// (루프 BGM 은 update() 가 곧바로 재시작하므로 항상 false)
+bool Audio::bgmFinished() {
+    if (!g_bgmOpen || g_bgmLoop) return false;
+    return bgmModeIs("stopped");
 }
 
 void Audio::playSE(const std::string& name) {

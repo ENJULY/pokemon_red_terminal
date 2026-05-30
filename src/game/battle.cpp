@@ -1,6 +1,7 @@
 #include "battle.h"
 #include "../data/type_chart.h"
 #include "../data/sprites.h"
+#include "../engine/audio.h"
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -45,6 +46,7 @@ void Battle::startWild(int speciesId, int level) {
     state_.frame = 0;
     swprintf(state_.msg, 128, L"야생 %ls이(가) 나타났다!", state_.enemy.species->name);
     state_.msgWait = 0;
+    syncHPDisplay();
 }
 
 void Battle::startTrainer(const wchar_t* name, const wchar_t* preText,
@@ -69,6 +71,7 @@ void Battle::startTrainer(const wchar_t* name, const wchar_t* preText,
     state_.frame = 0;
     swprintf(state_.msg, 128, L"%ls이(가) 승부를 걸어왔다!", name);
     state_.msgWait = 0;
+    syncHPDisplay();
 }
 
 void Battle::startBrock() {
@@ -76,6 +79,11 @@ void Battle::startBrock() {
     int lvls[]   = {12, 14};
     startTrainer(L"관장 브록", L"바위 포켓몬은 최강이다!", ids, lvls, 2, 3, 1000);  // 3=BROCK intro, 상금 1000
     state_.type = BattleType::BOSS;
+}
+
+void Battle::syncHPDisplay() {
+    state_.dispEnemyHP  = state_.enemy.currentHP;
+    state_.dispPlayerHP = pl_.party[state_.playerPartyIdx].currentHP;
 }
 
 void Battle::setMsg(const wchar_t* m, const wchar_t* m2) {
@@ -188,6 +196,7 @@ void Battle::advanceAfterFaint() {
     state_.enemyPartyIdx++;
     if (state_.enemyPartyIdx < state_.enemyPartySize) {
         state_.enemy = state_.enemyParty[state_.enemyPartyIdx];
+        syncHPDisplay();   // 새 상대 — 체력바 슬라이드 없이 가득 찬 상태로 시작
         swprintf(state_.msg, 128, L"%ls! %ls 나와라!",
             state_.trainerName ? state_.trainerName : L"",
             state_.enemy.species->name);
@@ -344,6 +353,7 @@ void Battle::executePlayerMove() {
         } else {
             en.currentHP -= dmg;
             if (en.currentHP < 0) en.currentHP = 0;
+            Audio::playSE("se_bump");   // 공격 명중 효과음
             swprintf(state_.msg, 128, L"%ls의 %ls!", myPoke.species->name, mv.name);
             if (se) swprintf(state_.msg2, 128, L"효과가 굉장했다!");
             else if (ne) swprintf(state_.msg2, 128, L"효과가 별로인 것 같다...");
@@ -389,6 +399,7 @@ void Battle::executeEnemyMove() {
         } else {
             myPoke.currentHP -= dmg;
             if (myPoke.currentHP < 0) myPoke.currentHP = 0;
+            Audio::playSE("se_bump");   // 피격 효과음
             swprintf(state_.msg, 128, L"상대 %ls의 %ls!", en.species->name, mv.name);
             if (se) swprintf(state_.msg2, 128, L"효과가 굉장했다!");
             else if (ne) swprintf(state_.msg2, 128, L"효과가 별로인 것 같다...");
@@ -409,6 +420,16 @@ void Battle::update(Key key) {
     BattlePhase prevPhase = state_.phase;  // phase 변경 감지 (한글 잔상 정리용)
     Pokemon& myPoke = pl_.party[state_.playerPartyIdx];
     Pokemon& en     = state_.enemy;
+
+    // 체력바 슬라이드: 표시용 HP를 실제 HP 쪽으로 매 프레임 조금씩 이동 (약 24프레임에 풀바)
+    auto easeHP = [](int& disp, int target, int maxHP) {
+        if (disp == target) return;
+        int step = maxHP / 24; if (step < 1) step = 1;
+        if (disp > target) { disp -= step; if (disp < target) disp = target; }
+        else               { disp += step; if (disp > target) disp = target; }
+    };
+    easeHP(state_.dispPlayerHP, myPoke.currentHP, myPoke.maxHP);
+    easeHP(state_.dispEnemyHP,  en.currentHP,     en.maxHP);
 
     switch (state_.phase) {
 
@@ -671,6 +692,7 @@ void Battle::update(Key key) {
                 state_.awaitKey = true;
             } else {
                 state_.playerPartyIdx = sel;
+                syncHPDisplay();   // 교체된 포켓몬 — 체력바 즉시 동기화
                 swprintf(state_.msg, 128, L"%ls! 나가줘!", pl_.party[sel].species->name);
                 state_.msg2[0] = 0;
                 // 교체 후 적이 공격 (교체는 턴 소모)
@@ -1064,11 +1086,11 @@ void Battle::render() {
     int enBoxH = 5;
     ren_.drawBox(enInfoX - 1, enInfoY - 1, enBoxW, enBoxH, BG_PAPER + FG_DARK);
     ren_.fillRect(enInfoX, enInfoY, enBoxW - 2, enBoxH - 2, ' ', BG_PAPER + FG_DARK);
-    int enHpPct = en.currentHP * 100 / (en.maxHP > 0 ? en.maxHP : 1);
+    int enHpPct = state_.dispEnemyHP * 100 / (en.maxHP > 0 ? en.maxHP : 1);
     std::string enHpCol = BG_PAPER +
         ((enHpPct > 50) ? Color::GREEN :
          (enHpPct > 20) ? Color::YELLOW : Color::RED);
-    drawHPBar(enInfoX, enInfoY + 2, en.currentHP, en.maxHP, enHpCol);
+    drawHPBar(enInfoX, enInfoY + 2, state_.dispEnemyHP, en.maxHP, enHpCol);
 
     // ── Player HUD 박스 (우하단, msg box 위) ─────────────────
     int myInfoX = W - 32;
@@ -1077,11 +1099,11 @@ void Battle::render() {
     int myBoxH = 5;
     ren_.drawBox(myInfoX - 1, myInfoY - 1, myBoxW, myBoxH, BG_PAPER + FG_DARK);
     ren_.fillRect(myInfoX, myInfoY, myBoxW - 2, myBoxH - 2, ' ', BG_PAPER + FG_DARK);
-    int myHpPct = myPoke.currentHP * 100 / (myPoke.maxHP > 0 ? myPoke.maxHP : 1);
+    int myHpPct = state_.dispPlayerHP * 100 / (myPoke.maxHP > 0 ? myPoke.maxHP : 1);
     std::string myHpCol = BG_PAPER +
         ((myHpPct > 50) ? Color::GREEN :
          (myHpPct > 20) ? Color::YELLOW : Color::RED);
-    drawHPBar(myInfoX, myInfoY + 2, myPoke.currentHP, myPoke.maxHP, myHpCol);
+    drawHPBar(myInfoX, myInfoY + 2, state_.dispPlayerHP, myPoke.maxHP, myHpCol);
 
     // 대화창 박스 (하단) — 흰 종이 + 검정 테두리
     int boxY = msgY;
@@ -1251,7 +1273,7 @@ void Battle::renderKorean() {
     int enInfoY = 1;
     swprintf(buf, 64, L"상대 %ls  Lv.%d", en.species->name, en.level);
     ren_.printW(enInfoX, enInfoY, buf, BG_PAPER + Color::BLACK);
-    swprintf(buf, 64, L"HP: %d / %d", en.currentHP, en.maxHP);
+    swprintf(buf, 64, L"HP: %d / %d", state_.dispEnemyHP, en.maxHP);
     ren_.printW(enInfoX, enInfoY + 1, buf, BG_PAPER + Color::BLACK);
 
     // ── Player HUD (우하단, 흰 박스 안) — 이름/Lv/HP ──────────
@@ -1259,7 +1281,7 @@ void Battle::renderKorean() {
     int myInfoY = boxY - 5;
     swprintf(buf, 64, L"%ls  Lv.%d", myPoke.species->name, myPoke.level);
     ren_.printW(myInfoX, myInfoY, buf, BG_PAPER + Color::BLUE);
-    swprintf(buf, 64, L"HP: %d / %d", myPoke.currentHP, myPoke.maxHP);
+    swprintf(buf, 64, L"HP: %d / %d", state_.dispPlayerHP, myPoke.maxHP);
     ren_.printW(myInfoX, myInfoY + 1, buf, BG_PAPER + Color::BLACK);
 
     if (state_.phase == BattlePhase::SHOW_MSG ||

@@ -77,6 +77,8 @@ struct BattleState {
     int          learnSubPhase;    // 0=안내 메시지, 1=잊을 기술 선택, 2=결과 메시지
 
     int          itemMode;              // CHOOSE_ITEM 서브상태: 0=아이템선택, 1=상처약 파티 대상 선택
+    int          dispEnemyHP;           // 화면 표시용 HP(실제값으로 매 프레임 슬라이드) — 적
+    int          dispPlayerHP;          // 〃 — 내 포켓몬
     int          frame;
     int          transitionFrame;       // INTRO_TRANSITION 카운트다운
     bool         turnStarted;           // CHOOSE_MOVE에서 행동 결정됐는가 (false면 SHOW_MSG는 인사 메시지)
@@ -126,4 +128,5 @@ private:
     int  chooseEnemyMove();
     void drawHPBar(int x, int y, int cur, int maxHP, const std::string& color);
     void drawSprite(int x, int y, int speciesId, bool back);
+    void syncHPDisplay();   // 표시용 HP를 현재 전투원 실제 HP로 즉시 동기화(전투원 교체 시)
 };

@@ -8,6 +8,8 @@
 #include <string>
 
 enum class Scene {
+    INTRO_MOVIE,        // 오프닝 애니메이션 (게임프리크 → 니도리노 vs 팬텀 → 타이틀)
+    TITLE,              // 타이틀 화면 (포켓몬 로고 + 타이틀 몬 + PRESS START)
     INTRO,              // 오박사 나레이션 (전/후반 공용)
     NAME_INPUT,         // 플레이어 이름 입력
     RIVAL_NAME_INPUT,   // 라이벌 이름 입력
@@ -48,7 +50,7 @@ public:
     bool running = true;
 
 private:
-    Scene    scene_   = Scene::INTRO;
+    Scene    scene_   = Scene::INTRO_MOVIE;
     int      frame_   = 0;
     int      volMsgTimer_ = 0;   // 볼륨 표시 잔여 프레임
     Player   player_  = {};
@@ -66,6 +68,12 @@ private:
     static const wchar_t* INTRO_LINES[INTRO_COUNT];
     int  introStep_     = 0;
 
+    void updateIntroMovie(Key key);
+    void renderIntroMovie();
+    void renderIntroMovieKorean();
+    void updateTitle(Key key);
+    void renderTitle();
+    void renderTitleKorean();
     void updateIntro(Key key);
     void renderIntro();
     void renderIntroKorean();

@@ -10,14 +10,19 @@ public:
     // exe 위치 기준 sounds/ 경로 캐싱. main 시작 시 1회 호출.
     static void init();
 
-    // BGM: 반복 재생. 이미 같은 곡이 재생 중이면 무시(끊김 방지).
-    static void playBGM(const std::string& name);
+    // BGM: 재생. 이미 같은 곡이 재생 중이면 무시(끊김 방지).
+    // loop=false 면 1회만 재생(끝나면 멈춤) — 인트로처럼 곡 종료로 씬 전환할 때 사용.
+    static void playBGM(const std::string& name, bool loop = true);
     static void stopBGM();
     static void pauseBGM();
     static void resumeBGM();
 
     // 매 프레임 호출 — MCI repeat 가 안 먹는 환경에서도 곡이 끝나면 재시작(루프 보장).
     static void update();
+
+    // 현재 BGM 이 재생 중인지 / 비루프 BGM 이 끝까지 재생됐는지.
+    static bool bgmPlaying();
+    static bool bgmFinished();
 
     // 출력 볼륨 조절 (0~100%). +/- 키로 실행 중 조절. 기본 ~33%.
     static void volumeUp();

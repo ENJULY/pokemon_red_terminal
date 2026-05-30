@@ -146,7 +146,10 @@ static const char* mapBGM(int id) {
 // 전이마다 일일이 호출하지 않아도 항상 올바른 곡이 재생된다.
 void Game::updateBGM() {
     const char* t = nullptr;
+    // 인트로 데모: 원작 Music_IntroBattle 을 1회만 재생(루프X) → 곡이 끝나면 타이틀로.
+    if (scene_ == Scene::INTRO_MOVIE) { Audio::playBGM("introbattle", false); return; }
     switch (scene_) {
+    case Scene::TITLE:
     case Scene::INTRO:
     case Scene::NAME_INPUT:
     case Scene::RIVAL_NAME_INPUT:     t = "title";          break;
@@ -180,6 +183,8 @@ void Game::update(Key key) {
     if (key == Key::VOL_DOWN) { Audio::volumeDown(); volMsgTimer_ = 16; return; }
 
     switch (scene_) {
+    case Scene::INTRO_MOVIE:       updateIntroMovie(key);     break;
+    case Scene::TITLE:             updateTitle(key);          break;
     case Scene::INTRO:              updateIntro(key);          break;
     case Scene::NAME_INPUT:         /* handled separately */   break;
     case Scene::RIVAL_NAME_INPUT:   /* handled separately */   break;
@@ -368,6 +373,8 @@ void Game::update(Key key) {
 
 void Game::render() {
     switch (scene_) {
+    case Scene::INTRO_MOVIE:       renderIntroMovie();     break;
+    case Scene::TITLE:             renderTitle();          break;
     case Scene::INTRO:              renderIntro();          break;
     case Scene::NAME_INPUT:         renderNameInput();      break;
     case Scene::RIVAL_NAME_INPUT:   renderRivalNameInput(); break;
@@ -395,6 +402,8 @@ void Game::render() {
 
 void Game::renderKorean() {
     switch (scene_) {
+    case Scene::INTRO_MOVIE:       renderIntroMovieKorean();     break;
+    case Scene::TITLE:             renderTitleKorean();          break;
     case Scene::INTRO:              renderIntroKorean();          break;
     case Scene::NAME_INPUT:         renderNameInputKorean();      break;
     case Scene::RIVAL_NAME_INPUT:   renderRivalNameInputKorean(); break;
@@ -512,6 +521,184 @@ void Game::renderWarpMenuKorean() {
     }
 }
 
+// 정면 몬스터 스프라이트(SpriteData) 출력 — 인트로/타이틀용 (배틀 drawSprite 동일 포맷)
+static void drawFrontSprite(Renderer& r, const SpriteData& spr, int x, int y) {
+    for (int i = 0; i < spr.height; i++)
+        if (spr.rows[i]) r.printRaw(x, y + i, spr.rows[i]);
+}
+
+// 인트로 무비 오버레이(raw ANSI 행 배열) 출력
+static void drawRows(Renderer& r, const char* rows[], int h, int x, int y) {
+    if (y < 0) y = 0;
+    for (int i = 0; i < h; i++)
+        if (rows[i]) r.printRaw(x, y + i, rows[i]);
+}
+
+// 니도리노 HIP/HOP — 앞뒤로 오가며 무지개형 포물선으로 뛴다.
+// 24프레임 = 앞으로(팬텀쪽) 한 번 아치 + 뒤로 한 번 아치.
+static int hopX(int f) {          // 수평: 0→앞(-8)→0 (팬텀쪽 갔다 복귀)
+    int p = f % 24;               // 0..23
+    return (p < 12) ? -(8 * p / 12) : -(8 * (24 - p) / 12);
+}
+static int hopY(int f) {          // 수직: 12프레임마다 포물선 아크(최고 8)
+    int p = f % 12;               // 0..11
+    int d = p - 6;                // -6..5
+    return 8 * (36 - d * d) / 36;  // p=6 최고 8, p=0/12 착지
+}
+
+// ─── 오프닝 애니메이션 (원작 PlayIntro: 니도리노 vs 팬텀) ──────────────────────
+// frame_ 기반. 인트로곡(introbattle)이 1회 재생을 마치면 타이틀로 넘어간다.
+// 아무 키나 누르면 즉시 스킵(원작 CheckForUserInterruption).
+// 실제 안무/타임라인은 renderIntroMovie 주석 참고.
+static const int IM_FALLBACK_END = 122;   // 오디오 실패(파일 없음 등) 시 폴백 길이
+static const int IM_HARD_CAP     = 400;   // 안전 상한 (mode 보고 이상 시)
+
+void Game::updateIntroMovie(Key key) {
+    bool finished  = Audio::bgmFinished();   // 인트로곡 1회 재생 종료
+    // BGM 은 updateBGM(이 함수 뒤 호출)에서 시작 → 초반 몇 프레임은 미재생. frame_>=8 후 판단.
+    bool audioDead = frame_ >= 8 && !Audio::bgmPlaying() && !finished;
+    if (key == Key::A || key == Key::START || finished ||
+        (audioDead && frame_ >= IM_FALLBACK_END) || frame_ >= IM_HARD_CAP) {
+        changeScene(Scene::TITLE);
+        return;
+    }
+    switch (frame_) {            // 효과음 (해당 프레임 1회) — 원작 intro.asm SFX 대응
+    case 18: Audio::playSE("se_cursor"); break;  // SFX_INTRO_HIP (점프)
+    case 30: Audio::playSE("se_cursor"); break;  // SFX_INTRO_HOP (착지)
+    case 40: Audio::playSE("se_menu");   break;  // SFX_INTRO_RAISE (팬텀 팔 듦)
+    case 58: Audio::playSE("se_bump");   break;  // SFX_INTRO_CRASH (슬래시 임팩트)
+    case 68: Audio::playSE("se_cursor"); break;  // SFX_INTRO_HIP (점프)
+    case 82: Audio::playSE("se_bump");   break;  // SFX_INTRO_LUNGE (물기 돌진)
+    default: break;
+    }
+}
+
+// 원작 PlayIntro 그대로 — gfx/intro/red_nidorino_1~3(니도리노 OAM) + gfx/intro/gengar(배경 실루엣 3포즈).
+// 흰 배경 위 어두운 실루엣(원작 동일). 니도리노 좌하단(뒷모습)에서 등장, 팬텀 우상단 큰 실루엣.
+//  0~16  니도리노 슬라이드 인(좌→제자리)   16~40  제자리 포물선 점프(공중엔 대기 프레임)
+// 40~52  팬텀 raise(포즈1)                  52~66  팬텀 slash(포즈2)+니도리노 반격점프(프레임3)
+// 66~82  팬텀 복귀+바운스                   82~113 니도리노 런지(물기)
+// 113~   최종 물기 장면 유지 → introbattle 곡이 끝나면 updateIntroMovie 에서 타이틀로
+void Game::renderIntroMovie() {
+    int W = renderer.width, H = renderer.height;
+    int f = frame_;
+
+    // 원작 인트로 배경 = 흰색 (어두운 실루엣 대비)
+    renderer.fillRect(0, 0, W, H, ' ', std::string(Color::BG_WHITE)+Color::WHITE);
+    int cx = W / 2, cy = H / 2;
+
+    // 유튜브 원작 확인: 왼쪽=팬텀(공격), 오른쪽=니도리노(스프라이트가 좌향이라 왼쪽 팬텀을 봄, 미러 불필요)
+    int nidBaseX = cx + 10;  int nidBaseY = cy + 2;        // 니도리노 48×24, 우측
+    int genX     = cx - 58;                                // 팬텀 56×28, 좌측(큼)
+    int genY     = nidBaseY + INTRO_NIDORINO_H - INTRO_GENGAR_H;  // 둘이 같은 바닥선(일직선)
+    if (genY < 0) genY = 0;
+    if (nidBaseY < 0) nidBaseY = 0;
+
+    int nidX = nidBaseX, nidY = nidBaseY;
+    int nidFrame = 0, genPose = 0;
+    bool nidHide = false;   // 피격 깜빡임
+    // 프레임 의미(원작): 0=대기, 1=피격/리코일(FightIntroFrontMon2), 2=물기/런지(FightIntroFrontMon3)
+
+    if (f < 16) {                                 // P1 니도리노 오른쪽서 슬라이드 인
+        nidX = W - (W - nidBaseX) * f / 16;
+    } else if (f < 40) {                          // P2 HIP/HOP — 앞뒤로 오가며 포물선 점프
+        nidX += hopX(f);                          // 팬텀쪽 갔다 복귀
+        nidY -= hopY(f);                          // 무지개형 아크(공중엔 대기 프레임)
+        nidFrame = 0;                             // 공중에서 발길질(피격 포즈) 안 함
+    } else if (f < 52) {                          // P3 팬텀 raise(팔 듦)
+        genPose = 1;
+    } else if (f < 66) {                          // P4 팬텀 slash(오른쪽 후려침) → 니도리노 피격
+        genPose = 2;
+        int q = f - 52;                           // 0..13
+        genX += (q < 7) ? q : (14 - q);           // 팬텀 오른쪽(니도리노 쪽)으로 후려치고 복귀
+        nidFrame = 1;                             // 피격 포즈
+        if (q >= 6) {                             // 임팩트! 피격 반응
+            int k = q - 6;                        // 0..7
+            nidY -= (k < 4) ? (8 - 2 * k) : 0;    // 위로 튕겼다 착지
+            nidX += (k < 6) ? (6 - k) : 0;        // 오른쪽으로 넉백(팬텀 반대로) 후 복귀
+            nidHide = (k < 4) && (k % 2 == 1);    // 피격 깜빡임
+        }
+    } else if (f < 82) {                          // P5 팬텀 복귀 + 니도리노 앞뒤 포물선 점프
+        nidX += hopX(f);
+        nidY -= hopY(f);
+        nidFrame = 0;
+    } else {                                      // P6 니도리노 점프해서 물기 — 팬텀에 파고들어 가려진 채 끝(복귀 없음)
+        int span = 31, q = f - 82;                // 82~113
+        if (q > span) q = span;
+        int target = genX + 24;                   // 팬텀 몸에 깊숙이 겹치는 지점
+        nidX = nidBaseX - (nidBaseX - target) * q / span;   // 오른쪽 → 팬텀으로 (단조 돌진)
+        int d = q - span / 2; if (d < 0) d = -d;
+        nidY = nidBaseY - 10 * (span / 2 - d) / (span / 2); // 점프 아크(중간 최고점→착지=무는 순간)
+        nidFrame = 2;                             // 무는 프레임
+    }
+
+    // 그리기 순서: 평소엔 팬텀(배경)→니도리노(전경). 단 물기 돌진(P6)엔 니도리노가
+    // 팬텀에 파고들어 "가려진" 상태가 되도록 팬텀을 위에 덮어 그림.
+    if (f >= 82) {
+        if (!nidHide) drawRows(renderer, INTRO_NIDORINO[nidFrame], INTRO_NIDORINO_H, nidX, nidY);
+        drawRows(renderer, INTRO_GENGAR[genPose], INTRO_GENGAR_H, genX, genY);
+    } else {
+        drawRows(renderer, INTRO_GENGAR[genPose], INTRO_GENGAR_H, genX, genY);
+        if (!nidHide) drawRows(renderer, INTRO_NIDORINO[nidFrame], INTRO_NIDORINO_H, nidX, nidY);
+    }
+}
+
+void Game::renderIntroMovieKorean() {
+    int H = renderer.height;
+    renderer.printW(2, H - 1, L"아무 키나 누르면 건너뛰기",
+        std::string(Color::BG_WHITE) + "\033[38;5;240m");
+}
+
+// ─── 타이틀 화면 (원작 PlayIntro 종료 후 타이틀 = 로고 + 타이틀 몬 + PRESS START) ──
+void Game::updateTitle(Key key) {
+    if (key == Key::A || key == Key::START) {
+        introStep_ = 0;
+        changeScene(Scene::INTRO);   // 오박사 스피치 시작
+    }
+}
+
+void Game::renderTitle() {
+    int W = renderer.width, H = renderer.height;
+    // 원작 GB 타이틀은 모노크롬 — 회색(244) 바탕에 흑백 로고/몬/레드(스프라이트 회색박스가 녹음)
+    std::string gray = "\033[48;5;244m";
+    std::string dark = "\033[38;5;232m";
+    renderer.fillRect(0, 0, W, H, ' ', gray + dark);
+    int cx = W / 2;
+
+    // 포켓몬 로고 그래픽 (128×28, 흑백 — 색은 데이터에 구워짐)
+    int logoX = cx - TITLE_LOGO_W / 2; if (logoX < 0) logoX = 0;
+    int logoY = 2;
+    for (int i = 0; i < TITLE_LOGO_H && logoY + i < H; i++)
+        renderer.printRaw(logoX, logoY + i, TITLE_LOGO[i]);
+
+    // RED VERSION 그래픽 (80×4) — 로고 바로 아래
+    int verY = logoY + TITLE_LOGO_H + 1;
+    int verX = cx - TITLE_VERSION_W / 2; if (verX < 0) verX = 0;
+    for (int i = 0; i < TITLE_VERSION_H && verY + i < H; i++)
+        renderer.printRaw(verX, verY + i, TITLE_VERSION[i]);
+
+    // ── 순환 몬 + 레드(주인공) 나란히 — 원작 title.asm: DrawPlayerCharacter + 순환 몬 + 손에 볼 ──
+    static const int TITLE_MONS[] = { 4, 7, 1, 13, 25, 95 };  // 파이리 먼저 순환(title_mons.asm)
+    const int nMons = (int)(sizeof(TITLE_MONS) / sizeof(TITLE_MONS[0]));
+    const SpriteData* mon = getSpriteFront(TITLE_MONS[(frame_ / 48) % nMons]);
+    int bandY = verY + TITLE_VERSION_H + 1;          // 몬/레드 공통 윗줄
+    int monX  = cx - 40;                              // 몬: 왼쪽
+    int redX  = cx + 8;                               // 레드: 오른쪽
+    if (mon) drawFrontSprite(renderer, *mon, monX, bandY);
+    drawRows(renderer, TITLE_RED, TITLE_RED_H, redX, bandY);
+
+    // ©GAME FREAK (하단 고정)
+    renderer.print(cx - 11, H - 2, "(C)1996 GAME FREAK inc.", gray + "\033[38;5;240m");
+
+    // PRESS START 깜빡임 (하단 고정)
+    if ((frame_ / 16) % 2 == 0)
+        renderer.print(cx - 8, H - 4, ">> PRESS START <<", gray + dark);
+}
+
+void Game::renderTitleKorean() {
+    // 한글 오버레이 없음 (원작 타이틀은 PRESS START 단일 — 깔끔히 유지)
+}
+
 // ─── 인트로 씬 ───────────────────────────────────────────────
 void Game::updateIntro(Key key) {
     if (key != Key::A) return;
@@ -559,55 +746,24 @@ void Game::renderIntro() {
 
     int cx = W/2;
     int bH=6, bY=H-bH-1, bW=W-4, bX=2;     // 대화창 위치
-    int spriteAreaH = bY;                    // 그림 영역(대화창 위) 세로
 
     // 스프라이트는 대화창 바로 위에 위치 (하단 5행은 대화창 뒤로 가려짐)
     int sprY = bY - INTRO_SPR_H + 5;
     if (sprY < 1) sprY = 1;
     int halfW = INTRO_SPR_W / 2;
 
-    // ── 스프라이트 (단계 3+) ────────────────────────────────────
-    if (introStep_ >= 3 && introStep_ <= 4) {
+    // ── 스프라이트 ──────────────────────────────────────────────
+    // 스피치 순서: 오박사(0~3) → 레드(4~5) → 라이벌(6~9) → 레드(10~11)
+    // (원작은 2~3에 니도리노를 끼우나, 회색 박스 깨짐 탓에 오박사로 통일)
+    if (introStep_ <= 3) {
+        // 0~3 오박사 (원작은 2~3에서 니도리노 정면을 보여주나, 본 클론은 오박사로 통일)
         drawIntroSprite(renderer, SPR_INTRO_OAK, cx - halfW, sprY);
-    } else if (introStep_ == 5) {
+    } else if (introStep_ == 4 || introStep_ == 5) {
         drawIntroSprite(renderer, SPR_INTRO_RED, cx - halfW, sprY);
-    } else if (introStep_ >= 6 && introStep_ <= 9) {
+    } else if (introStep_ <= 9) {
         drawIntroSprite(renderer, SPR_INTRO_RIVAL, cx - halfW, sprY);
-    } else if (introStep_ >= 10) {
+    } else {  // 10, 11
         drawIntroSprite(renderer, SPR_INTRO_RED, cx - halfW, sprY);
-    }
-
-    // ── 타이틀 화면 (단계 0~2): 큰 블록 글자 ─────────────────────
-    if (introStep_ <= 2) {
-        // POKEMON (7글자) — 각 글자 6 wide, 5 rows
-        static const char* T_POKEMON[5] = {
-            "#####  ####  ## ##  #####  ##   ##  ####  ##  ##",
-            "##  ## ## ## ####   ##     ## # ## ##  ## ### ##",
-            "#####  ## ## ###    ###    ##   ## ##  ## ######",
-            "##     ## ## ## ##  ##     ##   ## ##  ## ## ###",
-            "##      ####  ##  ## #####  ##   ##  ####  ##  ##",
-        };
-        // RED (3글자)
-        static const char* T_RED[5] = {
-            "#####  #####  #####",
-            "##  ## ##     ##  ##",
-            "#####  ###    ##  ##",
-            "## ##  ##     ##  ##",
-            "##  ## #####  #####",
-        };
-        int titleW = 49;       // POKEMON 줄 길이
-        int titleH = 5 + 1 + 5; // 11 rows
-        int titleY = (spriteAreaH - titleH) / 2;
-        if (titleY < 1) titleY = 1;
-        // POKEMON
-        for (int i = 0; i < 5; i++)
-            renderer.print(cx - titleW/2, titleY + i, T_POKEMON[i],
-                std::string(Color::BG_BLACK)+Color::BRIGHT_RED);
-        // RED (가운데 정렬, 한 줄 띄움)
-        int redW = 19;
-        for (int i = 0; i < 5; i++)
-            renderer.print(cx - redW/2, titleY + 6 + i, T_RED[i],
-                std::string(Color::BG_BLACK)+Color::BRIGHT_RED);
     }
 
     // ── 대화창 ───────────────────────────────────────────────────
