@@ -30,6 +30,14 @@ static NpcDef _cutTreeUsedBuffer = {
       nullptr, nullptr },
     0, 0
 };
+// 체육관 관장(보스) 도전 차단 — 남은 일반 트레이너를 먼저 이겨야 함
+static NpcDef _gymTrainerBuffer = {
+    0, 0,
+    { L"관장에게 도전하려면 이곳의 트레이너를",
+      L"먼저 모두 이겨야 한다!",
+      nullptr, nullptr },
+    0, 0
+};
 
 // ─── 주인공 GB 도트 스프라이트 매핑 (8 프레임, 4방향 × idle/walk) ─────
 //   0 = down idle, 1 = up idle, 2 = left idle, 3 = right idle
@@ -304,7 +312,7 @@ void Overworld::tryMove(int dx, int dy) {
     // 맵 경계 이탈 → 인접 맵 이동 (즉시 워프, 애니메이션 없음)
     // northEntryX/southEntryX = pokered connection offset (블록×2 스텝)
     // dest_x = source_x + offset (너비가 다른 맵 간 정확한 위치 보존)
-    if (ny < 0 && m->northMap >= 0) {
+    if (ny < 0 && m->northMap >= 0 && !isIndoorMap(state_.mapId)) {
         MapDef* nm = getMap(m->northMap);
         if (nm) {
             state_.mapId = m->northMap;
@@ -317,7 +325,7 @@ void Overworld::tryMove(int dx, int dy) {
         }
         return;
     }
-    if (ny >= m->mapH && m->southMap >= 0) {
+    if (ny >= m->mapH && m->southMap >= 0 && !isIndoorMap(state_.mapId)) {
         MapDef* sm = getMap(m->southMap);
         if (sm) {
             state_.mapId = m->southMap;
@@ -679,6 +687,24 @@ void Overworld::update(Key key) {
                     TrainerDef& tr = const_cast<TrainerDef&>(m->trainers[i]);
                     if (tr.defeated) continue;
                     if (tr.x == fx && tr.y == fy) {
+                        // 보스(관장)는 같은 맵의 일반 트레이너를 모두 격파한 뒤에만
+                        // 도전 가능 — 주니어 트레이너 스킵 방지
+                        if (tr.isBoss) {
+                            bool blocked = false;
+                            for (int j = 0; j < m->numTrainers; j++) {
+                                if (!m->trainers[j].isBoss && !m->trainers[j].defeated) {
+                                    blocked = true;
+                                    break;
+                                }
+                            }
+                            if (blocked) {
+                                state_.dialog.active = true;
+                                state_.dialog.npc = &_gymTrainerBuffer;
+                                state_.dialog.lineIdx = 0;
+                                talked = true;
+                                break;
+                            }
+                        }
                         state_.eventData = i;
                         if (tr.isBoss)
                             state_.pendingEvent = OwEvent::BOSS_BATTLE;
