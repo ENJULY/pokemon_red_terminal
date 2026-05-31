@@ -223,6 +223,12 @@ void Renderer::printRaw(int x, int y, const char* utf8_ansi) {
 //  변경 안 된 셀은 건드리지 않음 → 깜빡임 없음
 // ─────────────────────────────────────────────
 void Renderer::flush() {
+    std::string out;
+    out.reserve((size_t)width * height + 64);
+
+    // (1) begin synchronized update — 이 escape를 모르는 터미널은 무시함
+    out += "\033[?2026h";
+
     for (int y = 0; y < height; y++) {
         int x = 0;
         while (x < width) {
@@ -237,7 +243,10 @@ void Renderer::flush() {
 
             // 차이 나는 연속 구간만 커서 이동 후 출력
             int start = x;
-            moveCursor(start, y);
+            // 커서 이동 escape도 버퍼에 누적 (직접 printf 안 함)
+            char mv[24];
+            int mvn = snprintf(mv, sizeof(mv), "\033[%d;%dH", y + 1, start + 1);
+            out.append(mv, mvn);
             std::string lastColor = "\x02";  // 첫 셀에서 색상 강제 설정
 
             while (x < width) {
@@ -253,17 +262,23 @@ void Renderer::flush() {
                 }
                 const std::string& col = curr_[i].color;
                 if (col != lastColor) {
-                    if (col.empty()) printf("%s", Color::RESET);
-                    else             fwrite(col.data(), 1, col.size(), stdout);
+                    if (col.empty()) out += Color::RESET;
+                    else             out += col;
                     lastColor = col;
                 }
-                fwrite(curr_[i].ch.data(), 1, curr_[i].ch.size(), stdout);
+                out += curr_[i].ch;
                 prev_[i] = curr_[i];
                 x++;
             }
         }
     }
-    printf("%s", Color::RESET);
+    out += Color::RESET;
+
+    // (1) end synchronized update → 여기서 화면에 한 번에 반영
+    out += "\033[?2026l";
+
+    // (2) 누적된 프레임 전체를 단 한 번에 출력 → 부분 출력(찢김) 방지
+    fwrite(out.data(), 1, out.size(), stdout);
     fflush(stdout);
 }
 
